@@ -3,7 +3,8 @@ use macroquad::prelude::*;
 use std::collections::HashMap;
 pub const TILE_SIZE: f32 = 16.0;
 pub const MAP_SCALE_FACTOR: f32 = 1.0;
-enum Layer {
+#[derive(PartialEq)]
+pub enum Layer {
     Collision,
     Decor,
     Enemies,
@@ -21,10 +22,11 @@ impl Layer {
     }
 }
 pub struct Tile {
-    textures: Vec<(Layer, (u8, u8))>,
+    pub data: Vec<(Layer, (u8, u8))>,
 }
 
-pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Vec<Tile>, u32) {
+pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialData) {
+    let mut special_data = SpecialData::default();
     let tile_set_width = tileset
         .split_once("columns=\"")
         .unwrap()
@@ -160,11 +162,13 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Vec<Tile>, u32) {
         layers_pos.iter().map(|f| f.3).max().unwrap(),
     );
     dbg!(area);
+    let width = area.2 - area.0;
+    let height = area.3 - area.1;
     let mut tiles: Vec<Tile> = Vec::with_capacity(((area.2 - area.0) * (area.3 - area.1)) as usize);
 
-    for y in area.1..area.3 + 1 {
-        for x in area.0..area.2 + 1 {
-            let mut tile = Tile { textures: vec![] };
+    for y in area.1..=area.3 {
+        for x in area.0..=area.2 {
+            let mut tile = Tile { data: vec![] };
             for (chunks, name) in layers.iter() {
                 if let Some(chunk) = chunks.get(&(
                     ((x as f32 / TILE_SIZE).floor() * TILE_SIZE) as i32,
@@ -174,40 +178,55 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Vec<Tile>, u32) {
 
                     if id != 0 {
                         let id = id - 1;
-                        tile.textures.push((
-                            Layer::from_str(*name),
-                            (id % tile_set_width, id / tile_set_width),
-                        ));
+                        match id {
+                            220 => {
+                                special_data.spawn_location =
+                                    vec2(x as f32, y as f32) * MAP_SCALE_FACTOR * TILE_SIZE;
+                            }
+                            _ => {
+                                tile.data.push((
+                                    Layer::from_str(*name),
+                                    (id % tile_set_width, id / tile_set_width),
+                                ));
+                            }
+                        }
                     }
                 }
             }
             tiles.push(tile);
         }
     }
-    (tiles, (area.2 + 1 - area.0) as u32)
+    ((tiles, (area.2 + 1 - area.0) as u32), special_data)
 }
 pub enum Levels {
     TestLevel,
+}
+#[derive(Default)]
+pub struct SpecialData {
+    pub spawn_location: Vec2,
 }
 pub struct Level {
     pub tiles: Vec<Tile>,
     pub width: u32,
 }
 impl Level {
-    pub fn new(level: Levels) -> Self {
+    pub fn new(level: Levels) -> (Self, SpecialData) {
         let data = match level {
             Levels::TestLevel => include_str!("../assets/testlvl.tmx"),
         };
-        let tilemap = load_tilemap(data, include_str!("../assets/tileset.tsx"));
-        Self {
-            tiles: tilemap.0,
-            width: tilemap.1,
-        }
+        let (map, special_data) = load_tilemap(data, include_str!("../assets/tileset.tsx"));
+        (
+            Self {
+                tiles: map.0,
+                width: map.1,
+            },
+            special_data,
+        )
     }
     pub fn draw(&self) {
         for (index, tile) in self.tiles.iter().enumerate() {
             let index = index as u32;
-            for (_, texture_coord) in tile.textures.iter() {
+            for (_, texture_coord) in tile.data.iter() {
                 ASSETS.spritesheet.draw_from(
                     *texture_coord,
                     vec2(
@@ -222,10 +241,6 @@ impl Level {
                         ..Default::default()
                     }),
                 );
-                dbg!(vec2(
-                    (index % self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
-                    (index / self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
-                ));
             }
         }
     }

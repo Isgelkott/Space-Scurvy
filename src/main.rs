@@ -15,9 +15,11 @@ struct Game {
 }
 impl Game {
     fn new() -> Self {
+        let (map, special_data) = Level::new(Levels::TestLevel);
+        dbg!(special_data.spawn_location);
         Self {
-            map: Level::new(Levels::TestLevel),
-            player: Player::new(),
+            map,
+            player: Player::new(special_data.spawn_location),
             camera: create_camera(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1)),
         }
     }
@@ -26,7 +28,6 @@ impl Game {
         clear_background(BLACK);
 
         let scale_factor = (screen_width() / SCREEN_SIZE.0).min(screen_height() / SCREEN_SIZE.1);
-        dbg!(scale_factor);
         draw_texture_ex(
             &self.camera.render_target.as_ref().unwrap().texture,
             0.0,
@@ -59,6 +60,7 @@ impl Game {
         if is_key_down(KeyCode::Down) {
             self.camera.target.y += 5.0;
         }
+        self.player.update(&self.map);
         self.draw_camera();
     }
 }

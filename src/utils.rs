@@ -1,6 +1,8 @@
 use asefile::*;
 use image::*;
 use macroquad::prelude::*;
+
+use crate::level::{MAP_SCALE_FACTOR, TILE_SIZE};
 pub fn load_ase_texture(bytes: &[u8], layer: Option<u32>, frame: Option<u32>) -> Texture2D {
     let img = AsepriteFile::read(bytes).unwrap();
     let frame = frame.unwrap_or(0);
@@ -30,6 +32,11 @@ pub fn create_camera(dimensions: Vec2) -> Camera2D {
         ..Default::default()
     }
 }
+pub fn to_map_pos(pos: Vec2, map_width: usize) -> usize {
+    let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
+    map_pos.y as usize * map_width as usize + map_pos.x as usize
+}
+
 pub fn load_animation_from_tag(bytes: &[u8], tag: &str) -> (Vec<(Texture2D, u32)>, u32) {
     let file = AsepriteFile::read(bytes).unwrap();
     dbg!(tag);
