@@ -7,23 +7,15 @@ pub struct Spritesheet {
     size: (f32, f32),
 }
 impl Spritesheet {
-    pub fn draw_from(&self, coord: (u8, u8), pos: Vec2) {
-        draw_texture_ex(
-            &self.spritesheet,
-            pos.x,
-            pos.y,
-            WHITE,
-            DrawTextureParams {
-                dest_size: None,
-                source: Some(Rect {
-                    x: coord.0 as f32 * self.size.0,
-                    y: coord.1 as f32 * self.size.1,
-                    w: self.size.0,
-                    h: self.size.1,
-                }),
-                ..Default::default()
-            },
-        );
+    pub fn draw_from(&self, coord: (u8, u8), pos: Vec2, params: Option<DrawTextureParams>) {
+        let mut params = params.unwrap_or_default();
+        params.source = Some(Rect {
+            x: coord.0 as f32 * self.size.0,
+            y: coord.1 as f32 * self.size.1,
+            w: self.size.0,
+            h: self.size.1,
+        });
+        draw_texture_ex(&self.spritesheet, pos.x, pos.y, WHITE, params);
     }
     fn new(size: (f32, f32), texture: Texture2D) -> Self {
         Self {

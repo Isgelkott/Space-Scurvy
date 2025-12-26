@@ -78,4 +78,4 @@ impl Spritesheet {
         )
     }
 }
-type Animation = (Vec<(Texture2D, u32)>, u32);
+pub type Animation = (Vec<(Texture2D, u32)>, u32);

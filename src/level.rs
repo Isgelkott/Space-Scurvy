@@ -2,6 +2,7 @@ use crate::assets::ASSETS;
 use macroquad::prelude::*;
 use std::collections::HashMap;
 pub const TILE_SIZE: f32 = 16.0;
+pub const MAP_SCALE_FACTOR: f32 = 1.0;
 enum Layer {
     Collision,
     Decor,
@@ -22,6 +23,7 @@ impl Layer {
 pub struct Tile {
     textures: Vec<(Layer, (u8, u8))>,
 }
+
 pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Vec<Tile>, u32) {
     let tile_set_width = tileset
         .split_once("columns=\"")
@@ -165,8 +167,8 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Vec<Tile>, u32) {
             let mut tile = Tile { textures: vec![] };
             for (chunks, name) in layers.iter() {
                 if let Some(chunk) = chunks.get(&(
-                    ((x as f32 / 16.0).floor() * 16.0) as i32,
-                    ((y as f32 / 16.0).floor() * 16.0) as i32,
+                    ((x as f32 / TILE_SIZE).floor() * TILE_SIZE) as i32,
+                    ((y as f32 / TILE_SIZE).floor() * TILE_SIZE) as i32,
                 )) {
                     let id = chunk[(y % 16 * 16 + x % 16).max(0) as usize];
 
@@ -188,8 +190,8 @@ pub enum Levels {
     TestLevel,
 }
 pub struct Level {
-    tiles: Vec<Tile>,
-    width: u32,
+    pub tiles: Vec<Tile>,
+    pub width: u32,
 }
 impl Level {
     pub fn new(level: Levels) -> Self {
@@ -209,10 +211,21 @@ impl Level {
                 ASSETS.spritesheet.draw_from(
                     *texture_coord,
                     vec2(
-                        (index % self.width) as f32 * 16.0,
-                        (index / self.width) as f32 * 16.0,
+                        (index % self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
+                        (index / self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
                     ),
+                    Some(DrawTextureParams {
+                        dest_size: Some(vec2(
+                            TILE_SIZE * MAP_SCALE_FACTOR,
+                            TILE_SIZE * MAP_SCALE_FACTOR,
+                        )),
+                        ..Default::default()
+                    }),
                 );
+                dbg!(vec2(
+                    (index % self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
+                    (index / self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
+                ));
             }
         }
     }

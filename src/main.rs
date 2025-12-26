@@ -7,26 +7,62 @@ mod assets;
 mod level;
 mod player;
 mod utils;
+const SCREEN_SIZE: (f32, f32) = (200.0, 200.0);
 struct Game {
     map: Level,
     player: Player,
+    camera: Camera2D,
 }
 impl Game {
     fn new() -> Self {
         Self {
             map: Level::new(Levels::TestLevel),
             player: Player::new(),
+            camera: create_camera(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1)),
         }
     }
+    fn draw_camera(&self) {
+        set_default_camera();
+        clear_background(BLACK);
+
+        let scale_factor = (screen_width() / SCREEN_SIZE.0).min(screen_height() / SCREEN_SIZE.1);
+        dbg!(scale_factor);
+        draw_texture_ex(
+            &self.camera.render_target.as_ref().unwrap().texture,
+            0.0,
+            0.0,
+            WHITE,
+            DrawTextureParams {
+                dest_size: Some(vec2(
+                    SCREEN_SIZE.0 * scale_factor,
+                    SCREEN_SIZE.1 * scale_factor,
+                )),
+                ..Default::default()
+            },
+        );
+        set_camera(&self.camera);
+    }
     async fn update(&mut self) {
+        clear_background(BLACK);
+
         self.map.draw();
-        next_frame().await;
+        // self.camera.target = self.player.pos;
+        if is_key_down(KeyCode::Left) {
+            self.camera.target.x -= 5.0;
+        }
+        if is_key_down(KeyCode::Right) {
+            self.camera.target.x += 5.0;
+        }
+        if is_key_down(KeyCode::Up) {
+            self.camera.target.y -= 5.0;
+        }
+        if is_key_down(KeyCode::Down) {
+            self.camera.target.y += 5.0;
+        }
+        self.draw_camera();
     }
 }
-enum State {
-    Game,
-    Menu,
-}
+
 struct GameManger {
     game: Game,
 }
@@ -34,11 +70,15 @@ impl GameManger {
     fn new() -> Self {
         Self { game: Game::new() }
     }
+    async fn update(&mut self) {
+        self.game.update().await;
+    }
 }
 #[macroquad::main("krusbar")]
 async fn main() {
-    let mut game = Game::new();
+    let mut game = GameManger::new();
     loop {
         game.update().await;
+        next_frame().await;
     }
 }
