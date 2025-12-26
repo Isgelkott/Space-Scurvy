@@ -12,12 +12,14 @@ struct Game {
     map: Level,
     player: Player,
     camera: Camera2D,
+    clock: f32,
 }
 impl Game {
     fn new() -> Self {
         let (map, special_data) = Level::new(Levels::TestLevel);
         dbg!(special_data.spawn_location);
         Self {
+            clock: 0.0,
             map,
             player: Player::new(special_data.spawn_location),
             camera: create_camera(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1)),
@@ -47,7 +49,7 @@ impl Game {
         clear_background(BLACK);
 
         self.map.draw();
-        // self.camera.target = self.player.pos;
+
         if is_key_down(KeyCode::Left) {
             self.camera.target.x -= 5.0;
         }
