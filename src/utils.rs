@@ -1,4 +1,7 @@
-fn load_ase_texture(bytes: &[u8], layer: Option<u32>, frame: Option<u32>) -> Texture2D {
+use asefile::*;
+use image::*;
+use macroquad::prelude::*;
+pub fn load_ase_texture(bytes: &[u8], layer: Option<u32>, frame: Option<u32>) -> Texture2D {
     let img = AsepriteFile::read(bytes).unwrap();
     let frame = frame.unwrap_or(0);
     let img = if let Some(layer) = layer {
@@ -16,7 +19,7 @@ fn load_ase_texture(bytes: &[u8], layer: Option<u32>, frame: Option<u32>) -> Tex
     texture.set_filter(FilterMode::Nearest);
     texture
 }
-fn create_camera(dimensions: Vec2) -> Camera2D {
+pub fn create_camera(dimensions: Vec2) -> Camera2D {
     let rt = render_target(dimensions.y as u32, dimensions.y as u32);
     rt.texture.set_filter(FilterMode::Nearest);
 
@@ -50,13 +53,13 @@ pub fn load_animation_from_tag(bytes: &[u8], tag: &str) -> (Vec<(Texture2D, u32)
     }
     (frames, duration)
 }
-struct Spritesheet {
+pub struct Spritesheet {
     texture: Texture2D,
     widht: f32,
     height: f32,
 }
 impl Spritesheet {
-    fn draw_from(&self, world_pos: Vec2, texture_coord: (u8, u8), scale: f32) {
+    pub fn draw_from(&self, world_pos: Vec2, texture_coord: (u8, u8), scale: f32) {
         draw_texture_ex(
             &self.texture,
             world_pos.x,

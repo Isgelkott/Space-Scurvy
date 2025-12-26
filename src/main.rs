@@ -1,11 +1,12 @@
-use macroquad::prelude::*;
-mod utils;
-use utils::*;
-mod level;
+use assets::*;
 use level::*;
-struct Tile {
-    textures: Vec<(u8, u8)>,
-}
+use macroquad::prelude::*;
+use player::*;
+use utils::*;
+mod assets;
+mod level;
+mod player;
+mod utils;
 struct Game {
     map: Level,
     player: Player,
@@ -13,9 +14,13 @@ struct Game {
 impl Game {
     fn new() -> Self {
         Self {
-            map: Level::new(),
+            map: Level::new(Levels::TestLevel),
             player: Player::new(),
         }
+    }
+    async fn update(&mut self) {
+        self.map.draw();
+        next_frame().await;
     }
 }
 enum State {
@@ -32,5 +37,8 @@ impl GameManger {
 }
 #[macroquad::main("krusbar")]
 async fn main() {
-    let game = Game::new();
+    let mut game = Game::new();
+    loop {
+        game.update().await;
+    }
 }
