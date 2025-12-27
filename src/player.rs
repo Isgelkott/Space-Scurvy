@@ -88,7 +88,7 @@ impl Player {
         } else {
             self.velocity.x = direction.normalize_or_zero().x * self.speed * AIR_DRAG;
         }
-        draw_rectangle(self.pos.x, self.pos.y, self.size.x, self.size.y, WHITE);
+        // draw_rectangle(self.pos.x, self.pos.y, self.size.x, self.size.y, WHITE);
 
         let collision_points = [
             (0.0, 0.0),
@@ -124,8 +124,9 @@ impl Player {
                 let mut clamped_x = false;
                 if index < 4 {
                     println!("clampin with {}", index);
+                    let wa = if self.pos.x == x0 { true } else { false };
                     self.pos.x = self.pos.x.clamp(x0, x1);
-                    if self.pos.x == x0 || self.pos.x == x1 {
+                    if self.pos.x == x0 || self.pos.x == x1 && !wa {
                         clamped_x = true;
                         self.velocity.x = 0.0;
                     }
