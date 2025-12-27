@@ -1,9 +1,11 @@
 use assets::*;
+use enemies::*;
 use level::*;
 use macroquad::prelude::*;
 use player::*;
 use utils::*;
 mod assets;
+mod enemies;
 mod level;
 mod player;
 mod utils;
@@ -46,7 +48,7 @@ impl Game {
         set_camera(&self.camera);
     }
     async fn update(&mut self) {
-        clear_background(BLACK);
+        clear_background(YELLOW);
 
         self.map.draw();
 

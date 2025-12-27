@@ -103,8 +103,15 @@ impl Player {
         for (index, point) in collision_points.iter().enumerate() {
             let map_pos = (self.pos + self.velocity * get_frame_time() + vec2(point.0, point.1))
                 / (TILE_SIZE * MAP_SCALE_FACTOR);
+            let map_pos = if map_pos.x.floor() == map_pos.x && index % 2 == 1 {
+                print!("wabbaluba dub");
 
-            let tile_no = map_pos.y as usize * map.width as usize + map_pos.x as usize;
+                vec2(map_pos.x - 1.0, map_pos.y)
+            } else {
+                vec2(map_pos.x, map_pos.y)
+            };
+            let mut tile_no = map_pos.y as usize * map.width as usize + map_pos.x as usize;
+
             if tile_no > map.tiles.len() - 1 {
                 println!("out of bounds");
                 break;
@@ -122,9 +129,8 @@ impl Player {
                 let y0 = map_pos.y.floor() * TILE_SIZE * MAP_SCALE_FACTOR - point.1;
                 let y1 = (map_pos.y.floor() + 1.0) * MAP_SCALE_FACTOR * TILE_SIZE - point.1;
                 let mut clamped_x = false;
+                let wa = if self.pos.x == x0 { true } else { false };
                 if index < 4 {
-                    println!("clampin with {}", index);
-                    let wa = if self.pos.x == x0 { true } else { false };
                     self.pos.x = self.pos.x.clamp(x0, x1);
                     if self.pos.x == x0 || self.pos.x == x1 && !wa {
                         clamped_x = true;
@@ -132,9 +138,8 @@ impl Player {
                     }
                 } else if self.pos.y != y0 {
                     {
-                        println!("clampin with {}", index);
                         self.pos.x = self.pos.x.clamp(x0, x1);
-                        if self.pos.x == x0 || self.pos.x == x1 {
+                        if self.pos.x == x0 || self.pos.x == x1 && !wa {
                             clamped_x = true;
 
                             self.velocity.x = 0.0;
@@ -145,7 +150,6 @@ impl Player {
                     self.pos.y = self.pos.y.clamp(y0, y1);
                     if self.pos.y == y0 && !clamped_x {
                         self.velocity.y = 0.0;
-                        println!("grounded");
                         grounded = true;
                     }
                 }
