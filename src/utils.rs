@@ -86,3 +86,49 @@ impl Spritesheet {
     }
 }
 pub type Animation = (Vec<(Texture2D, u32)>, u32);
+pub trait Play {
+    fn play(&self, pos: Vec2, params: Option<DrawTextureParams>);
+    fn play_with_clock(
+        &self,
+        pos: Vec2,
+        params: Option<DrawTextureParams>,
+        clock: &mut f32,
+    ) -> bool;
+}
+impl Play for Animation {
+    fn play(&self, pos: Vec2, params: Option<DrawTextureParams>) {
+        let mut time = (get_time() * 1000.0) % self.1 as f64;
+        for i in &self.0 {
+            if time <= i.1 as f64 {
+                draw_texture_ex(&i.0, pos.x, pos.y, WHITE, params.unwrap_or_default());
+                break;
+            } else {
+                time -= i.1 as f64;
+            }
+        }
+    }
+    fn play_with_clock(
+        &self,
+        pos: Vec2,
+        params: Option<DrawTextureParams>,
+        clock: &mut f32,
+    ) -> bool {
+        let wa = (*clock * 1000.0) as u32;
+        if wa < self.1 {
+            let mut frame = wa;
+            for i in self.0.iter() {
+                if frame > i.1 {
+                    frame -= i.1
+                } else {
+                    draw_texture_ex(&i.0, pos.x, pos.y, WHITE, params.unwrap_or_default());
+
+                    break;
+                }
+            }
+            *clock += get_frame_time();
+            return true;
+        } else {
+            return false;
+        }
+    }
+}

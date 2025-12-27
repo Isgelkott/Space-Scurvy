@@ -50,18 +50,7 @@ impl Game {
 
         self.map.draw();
 
-        if is_key_down(KeyCode::Left) {
-            self.camera.target.x -= 5.0;
-        }
-        if is_key_down(KeyCode::Right) {
-            self.camera.target.x += 5.0;
-        }
-        if is_key_down(KeyCode::Up) {
-            self.camera.target.y -= 5.0;
-        }
-        if is_key_down(KeyCode::Down) {
-            self.camera.target.y += 5.0;
-        }
+        self.camera.target = self.player.pos;
         self.player.update(&self.map);
         self.draw_camera();
     }

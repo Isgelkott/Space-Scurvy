@@ -24,8 +24,36 @@ impl Spritesheet {
         }
     }
 }
+
+pub struct TopPlayerAnimations {
+    pub idle: Animation,
+}
+
+impl TopPlayerAnimations {
+    fn new() -> Self {
+        let data = include_bytes!("../assets/pirate.aseprite");
+        Self {
+            idle: load_animation_from_tag(data, "idle"),
+        }
+    }
+}
+pub struct BotttomPlayerAnimations {
+    pub idle: Animation,
+    pub walk: Animation,
+}
+impl BotttomPlayerAnimations {
+    fn new() -> Self {
+        let data = include_bytes!("../assets/pirate.aseprite");
+        Self {
+            idle: load_animation_from_tag(data, "idle"),
+            walk: load_animation_from_tag(data, "walk"),
+        }
+    }
+}
 pub struct Assets {
     pub spritesheet: Spritesheet,
+    pub top_player_animations: TopPlayerAnimations,
+    pub bottom_player_animations: BotttomPlayerAnimations,
 }
 
 impl Assets {
@@ -35,6 +63,8 @@ impl Assets {
                 (16.0, 16.0),
                 load_ase_texture(include_bytes!("../assets/spritesheet.aseprite"), None, None),
             ),
+            top_player_animations: TopPlayerAnimations::new(),
+            bottom_player_animations: BotttomPlayerAnimations::new(),
         }
     }
 }
