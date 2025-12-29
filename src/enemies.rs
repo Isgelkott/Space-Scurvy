@@ -165,7 +165,7 @@ impl Enemy for MachineGunner {
             projectiles.push(Box::new(StandardProjectile::new(
                 self.pos
                     + if flipped {
-                        vec2(8.5, 15.0)
+                        vec2(-8.5 + self.size.x, 15.0)
                     } else {
                         vec2(-8.5, 15.0)
                     },
