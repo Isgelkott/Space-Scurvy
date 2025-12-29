@@ -12,6 +12,7 @@ pub enum Layer {
     Decor,
     Enemies,
     Actuators,
+    Path,
 }
 impl Layer {
     fn from_str(input: &str) -> Self {
@@ -20,6 +21,7 @@ impl Layer {
             "decor" => Self::Decor,
             "enemies" => Self::Enemies,
             "actuators" => Self::Actuators,
+            "path" => Self::Path,
             _ => panic!("no layer named {}", input),
         }
     }
@@ -185,7 +187,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                             140..160 => {
                                 println!("found enemy, at {}", world_pos);
                                 let enemy = *ENEMY_IDS.get(&id).unwrap();
-                                special_data.enemies.push(enemy.spawn(world_pos));
+                                special_data.enemies.push((enemy, world_pos));
                             }
                             220 => {
                                 special_data.spawn_location = world_pos;
@@ -209,10 +211,11 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
 pub enum Levels {
     TestLevel,
 }
+
 #[derive(Default)]
 pub struct SpecialData {
     pub spawn_location: Vec2,
-    pub enemies: Vec<Box<dyn Enemy>>,
+    pub enemies: Vec<(PresetEnemies, Vec2)>,
 }
 pub struct Level {
     pub tiles: Vec<Tile>,
@@ -235,21 +238,23 @@ impl Level {
     pub fn draw(&self) {
         for (index, tile) in self.tiles.iter().enumerate() {
             let index = index as u32;
-            for (_, texture_coord) in tile.data.iter() {
-                ASSETS.spritesheet.draw_from(
-                    *texture_coord,
-                    vec2(
-                        (index % self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
-                        (index / self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
-                    ),
-                    Some(DrawTextureParams {
-                        dest_size: Some(vec2(
-                            TILE_SIZE * MAP_SCALE_FACTOR,
-                            TILE_SIZE * MAP_SCALE_FACTOR,
-                        )),
-                        ..Default::default()
-                    }),
-                );
+            for (layer, texture_coord) in tile.data.iter() {
+                if *layer != Layer::Path {
+                    ASSETS.spritesheet.draw_from(
+                        *texture_coord,
+                        vec2(
+                            (index % self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
+                            (index / self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
+                        ),
+                        Some(DrawTextureParams {
+                            dest_size: Some(vec2(
+                                TILE_SIZE * MAP_SCALE_FACTOR,
+                                TILE_SIZE * MAP_SCALE_FACTOR,
+                            )),
+                            ..Default::default()
+                        }),
+                    );
+                }
             }
         }
     }

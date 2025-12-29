@@ -4,7 +4,7 @@ use macroquad::prelude::*;
 
 use crate::{
     assets::ASSETS,
-    level::Level,
+    level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE},
     player::{self, Player},
     utils::{Animation, Play},
 };
@@ -20,10 +20,10 @@ pub enum PresetEnemies {
     SpikeBall,
 }
 impl PresetEnemies {
-    pub fn spawn(&self, pos: Vec2) -> Box<dyn Enemy> {
+    pub fn spawn(&self, pos: Vec2, map: &Level) -> Box<dyn Enemy> {
         match &self {
-            Self::Jetpacker => Jetpacker::spawn(pos),
-            Self::SpikeBall => SpikeBall::spawn(pos),
+            Self::Jetpacker => Jetpacker::spawn(pos, map),
+            Self::SpikeBall => SpikeBall::spawn(pos, map),
             _ => todo!(),
         }
     }
@@ -66,7 +66,70 @@ impl Projectile for EnergyBall {
         self.animation.play(self.pos, None);
         self.pos += self.velocity * get_frame_time();
         if check_player_collision(self.pos, self.size, player) {
-            player.hp.saturating_sub(20);
+            player.hp = player.hp.saturating_sub(20);
+        }
+    }
+}
+struct StandardProjectile {
+    pos: Vec2,
+    direction: Vec2,
+    speed: f32,
+    animation: &'static Animation,
+}
+impl StandardProjectile {
+    fn new(pos: Vec2, direction: Vec2, speed: f32, animation: &'static Animation) -> Self {
+        Self {
+            pos,
+            direction,
+            speed,
+            animation,
+        }
+    }
+}
+impl Projectile for StandardProjectile {
+    fn update(&mut self, player: &mut Player, map: &Level) {
+        self.pos += self.direction.normalize_or_zero() * self.speed * get_frame_time();
+        self.animation.play(self.pos, None);
+    }
+}
+pub trait Enemy {
+    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
+    where
+        Self: Sized;
+
+    fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>);
+}
+struct MachineGunner {
+    pos: Vec2,
+    clock: f32,
+}
+impl Enemy for MachineGunner {
+    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
+    where
+        Self: Sized,
+    {
+        Box::new(Self { pos, clock: 0.0 })
+    }
+    fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
+        let flipped: bool = if player.pos.x > self.pos.x {
+            true
+        } else {
+            false
+        };
+        if self.clock >= 0.4 {
+            projectiles.push(Box::new(StandardProjectile::new(
+                self.pos
+                    + if flipped {
+                        vec2(-10.0, 0.0)
+                    } else {
+                        vec2(10.0, 0.0)
+                    },
+                (player.pos - self.pos).normalize_or_zero(),
+                20.0,
+                &ASSETS.laser,
+            )));
+        } else {
+            self.clock += get_frame_time();
         }
     }
 }
@@ -74,7 +137,7 @@ struct SpikeBall {
     pos: Vec2,
 }
 impl Enemy for SpikeBall {
-    fn spawn(pos: Vec2) -> Box<dyn Enemy>
+    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
     where
         Self: Sized,
     {
@@ -85,26 +148,40 @@ impl Enemy for SpikeBall {
         let _ = &ASSETS.spike_ball.play(self.pos, None);
     }
 }
-pub trait Enemy {
-    fn spawn(pos: Vec2) -> Box<dyn Enemy>
-    where
-        Self: Sized;
-
-    fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>);
-}
 struct Jetpacker {
     origin: Vec2,
     clock: f32,
     attacked: bool,
     flipped: bool,
+    behavior_curve: [(f32, f32, &'static Animation, bool); 6],
 }
 
 impl Enemy for Jetpacker {
-    fn spawn(pos: Vec2) -> Box<dyn Enemy>
+    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
     where
         Self: Sized,
     {
+        let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
+        let mut tile = (map_pos.y as usize - 1) * map.width as usize + map_pos.x as usize;
+        let mut fly_height = 0.0;
+        while map.tiles[tile].data.iter().any(|f| f.0 == Layer::Path) {
+            println!("path above at tile {}", tile);
+            tile = tile - map.width as usize;
+            fly_height -= TILE_SIZE * MAP_SCALE_FACTOR;
+        }
+        let flight_speed = -50.0;
+        let flight_time = (fly_height / flight_speed).abs();
+        dbg!(flight_time);
+        let curve: [(f32, f32, &Animation, bool); 6] = [
+            (0.0, 0.0, &ASSETS.jetpacker.fly, false),
+            (flight_time, fly_height, &ASSETS.jetpacker.fly, false),
+            (flight_time + 2.5, fly_height, &ASSETS.jetpacker.fly, true),
+            (flight_time + 4.0, fly_height, &ASSETS.jetpacker.fly, false),
+            (flight_time + 5.0, 0.0, &ASSETS.jetpacker.idle, false),
+            (flight_time + 7.0, 0.0, &ASSETS.jetpacker.idle, false),
+        ];
         Box::new(Self {
+            behavior_curve: curve,
             flipped: false,
             attacked: false,
             clock: 0.0,
@@ -118,23 +195,15 @@ impl Enemy for Jetpacker {
             false
         };
 
-        let curve = [
-            (0.0, 0.0, &ASSETS.jetpacker.fly, false),
-            (1.0, -50.0, &ASSETS.jetpacker.fly, false),
-            (2.5, -50.0, &ASSETS.jetpacker.fly, true),
-            (4.0, -50.0, &ASSETS.jetpacker.fly, false),
-            (5.0, 0.0, &ASSETS.jetpacker.idle, false),
-            (7.0, 0.0, &ASSETS.jetpacker.idle, false),
-        ];
-        if self.clock + get_frame_time() > curve.last().unwrap().0 {
+        if self.clock + get_frame_time() > self.behavior_curve.last().unwrap().0 {
             self.clock = 0.0;
             self.attacked = false;
         } else {
             self.clock += get_frame_time();
         }
-        let mut last = curve.last().unwrap();
+        let mut last = self.behavior_curve.last().unwrap();
         let time = self.clock;
-        for p in curve.iter().rev() {
+        for p in self.behavior_curve.iter().rev() {
             if time >= p.0 {
                 let k = (last.1 - p.1) / (last.0 - p.0);
                 let pos = vec2(
@@ -151,7 +220,11 @@ impl Enemy for Jetpacker {
                 if p.3 && !self.attacked {
                     self.attacked = true;
                     projectiles.push(Box::new(EnergyBall::new(
-                        pos + if self.flipped { 10.0 } else { -10.0 } + vec2(0.0, 10.0),
+                        pos + if self.flipped {
+                            vec2(10.0, 0.0)
+                        } else {
+                            vec2(-10.0, 0.0)
+                        } + vec2(0.0, 5.0),
                         self.flipped,
                     )));
                 }

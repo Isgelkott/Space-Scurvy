@@ -21,10 +21,13 @@ struct Game {
 impl Game {
     fn new() -> Self {
         let (map, special_data) = Level::new(Levels::TestLevel);
-        dbg!(special_data.spawn_location);
+        let mut enemies = Vec::new();
+        for enemy in special_data.enemies.iter() {
+            enemies.push(enemy.0.spawn(enemy.1, &map))
+        }
         Self {
             projectiles: Vec::new(),
-            enemies: special_data.enemies,
+            enemies,
             clock: 0.0,
             map,
             player: Player::new(special_data.spawn_location),
@@ -53,7 +56,7 @@ impl Game {
     }
 
     async fn update(&mut self) {
-        clear_background(GRAY);
+        clear_background(SKYBLUE);
 
         self.map.draw();
 

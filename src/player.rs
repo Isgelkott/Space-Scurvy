@@ -28,7 +28,7 @@ impl Player {
                 TILE_SIZE * MAP_SCALE_FACTOR,
                 TILE_SIZE * MAP_SCALE_FACTOR * 2.0,
             ),
-            pos: pos,
+            pos,
 
             velocity: Vec2::ZERO,
             speed: 100.0,
