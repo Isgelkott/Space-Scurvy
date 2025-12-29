@@ -83,7 +83,7 @@ impl Player {
         if self.grounded {
             self.velocity = direction.normalize_or_zero() * self.speed;
             if is_key_pressed(KeyCode::Space) {
-                self.velocity.y = -200.0;
+                self.velocity.y = -300.0;
             }
         } else {
             self.velocity.x = direction.normalize_or_zero().x * self.speed * AIR_DRAG;
@@ -101,11 +101,10 @@ impl Player {
         self.velocity.y += GRAVITY;
         let mut grounded = false;
         for (index, point) in collision_points.iter().enumerate() {
+            // SO JANK PLS FORGIVE
             let map_pos = (self.pos + self.velocity * get_frame_time() + vec2(point.0, point.1))
                 / (TILE_SIZE * MAP_SCALE_FACTOR);
             let map_pos = if map_pos.x.floor() == map_pos.x && index % 2 == 1 {
-                print!("wabbaluba dub");
-
                 vec2(map_pos.x - 1.0, map_pos.y)
             } else {
                 vec2(map_pos.x, map_pos.y)
@@ -118,12 +117,11 @@ impl Player {
             }
             let pottential_collider = &map.tiles[tile_no];
 
-            if pottential_collider // jank af code but could not bother
+            if pottential_collider // DONT READ
                 .data
                 .iter()
                 .any(|f| f.0 == Layer::Collision)
             {
-                println!("coolid w/ {}", tile_no);
                 let x0 = map_pos.x.floor() * TILE_SIZE * MAP_SCALE_FACTOR - point.0;
                 let x1 = (map_pos.x.floor() + 1.0) * MAP_SCALE_FACTOR * TILE_SIZE - point.0;
                 let y0 = map_pos.y.floor() * TILE_SIZE * MAP_SCALE_FACTOR - point.1;
@@ -146,12 +144,13 @@ impl Player {
                         }
                     }
                 }
-                if index > 1 {
-                    self.pos.y = self.pos.y.clamp(y0, y1);
-                    if self.pos.y == y0 && !clamped_x {
-                        self.velocity.y = 0.0;
-                        grounded = true;
-                    }
+
+                self.pos.y = self.pos.y.clamp(y0, y1);
+                if self.pos.y == y0 && !clamped_x {
+                    self.velocity.y = 0.0;
+                    grounded = true;
+                } else if self.pos.y == y1 {
+                    self.velocity.y = 0.0;
                 }
             }
         }

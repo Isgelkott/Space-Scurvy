@@ -1,6 +1,9 @@
-use crate::assets::ASSETS;
+use crate::{
+    assets::ASSETS,
+    enemies::{Enemy, PresetEnemies},
+};
 use macroquad::prelude::*;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::LazyLock};
 pub const TILE_SIZE: f32 = 16.0;
 pub const MAP_SCALE_FACTOR: f32 = 1.0;
 #[derive(PartialEq)]
@@ -164,7 +167,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
     dbg!(area);
     let width = area.2 - area.0;
     let height = area.3 - area.1;
-    let mut tiles: Vec<Tile> = Vec::with_capacity(((area.2 - area.0) * (area.3 - area.1)) as usize);
+    let mut tiles: Vec<Tile> = Vec::with_capacity(((width) * (area.3 - area.1)) as usize);
 
     for y in area.1..=area.3 {
         for x in area.0..=area.2 {
@@ -175,13 +178,17 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                     ((y as f32 / TILE_SIZE).floor() * TILE_SIZE) as i32,
                 )) {
                     let id = chunk[(y % 16 * 16 + x % 16).max(0) as usize];
-
+                    let world_pos = vec2(x as f32, y as f32) * MAP_SCALE_FACTOR * TILE_SIZE;
                     if id != 0 {
                         let id = id - 1;
                         match id {
+                            140..160 => {
+                                println!("found enemy, at {}", world_pos);
+                                let enemy = *ENEMY_IDS.get(&id).unwrap();
+                                special_data.enemies.push(enemy.spawn(world_pos));
+                            }
                             220 => {
-                                special_data.spawn_location =
-                                    vec2(x as f32, y as f32) * MAP_SCALE_FACTOR * TILE_SIZE;
+                                special_data.spawn_location = world_pos;
                             }
                             _ => {
                                 tile.data.push((
@@ -196,14 +203,17 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
             tiles.push(tile);
         }
     }
-    ((tiles, (area.2 + 1 - area.0) as u32), special_data)
+    ((tiles, (width + 1) as u32), special_data)
 }
+static ENEMY_IDS: LazyLock<HashMap<u8, PresetEnemies>> =
+    LazyLock::new(|| HashMap::from([(140, PresetEnemies::Jetpacker)]));
 pub enum Levels {
     TestLevel,
 }
 #[derive(Default)]
 pub struct SpecialData {
     pub spawn_location: Vec2,
+    pub enemies: Vec<Box<dyn Enemy>>,
 }
 pub struct Level {
     pub tiles: Vec<Tile>,

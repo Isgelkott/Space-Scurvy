@@ -37,8 +37,8 @@ pub fn to_map_pos(pos: Vec2, map_width: usize) -> usize {
     map_pos.y as usize * map_width as usize + map_pos.x as usize
 }
 
-pub fn load_animation_from_tag(bytes: &[u8], tag: &str) -> (Vec<(Texture2D, u32)>, u32) {
-    let file = AsepriteFile::read(bytes).unwrap();
+pub fn load_animation_from_tag(data: &[u8], tag: &str) -> (Vec<(Texture2D, u32)>, u32) {
+    let file = AsepriteFile::read(data).unwrap();
     dbg!(tag);
     let tag = file.tag_by_name(tag).unwrap();
     let start = tag.from_frame();

@@ -10,17 +10,21 @@ mod level;
 mod player;
 mod utils;
 const SCREEN_SIZE: (f32, f32) = (200.0, 200.0);
+
 struct Game {
     map: Level,
     player: Player,
     camera: Camera2D,
     clock: f32,
+    enemies: Vec<Box<dyn Enemy>>,
+    projectiles: Vec,
 }
 impl Game {
     fn new() -> Self {
         let (map, special_data) = Level::new(Levels::TestLevel);
         dbg!(special_data.spawn_location);
         Self {
+            enemies: special_data.enemies,
             clock: 0.0,
             map,
             player: Player::new(special_data.spawn_location),
@@ -47,13 +51,15 @@ impl Game {
         );
         set_camera(&self.camera);
     }
+
     async fn update(&mut self) {
-        clear_background(YELLOW);
+        clear_background(GRAY);
 
         self.map.draw();
 
         self.camera.target = self.player.pos;
         self.player.update(&self.map);
+        update_enemies(&mut self.enemies, &self.map);
         self.draw_camera();
     }
 }
