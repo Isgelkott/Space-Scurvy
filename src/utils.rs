@@ -100,7 +100,7 @@ impl Spritesheet {
     }
 }
 pub type Animation = (Vec<(Texture2D, u32)>, u32);
-pub trait Play {
+pub trait AnimationMethods {
     fn play(&self, pos: Vec2, params: Option<DrawTextureParams>);
     fn play_with_clock(
         &self,
@@ -108,8 +108,12 @@ pub trait Play {
         params: Option<DrawTextureParams>,
         clock: &mut f32,
     ) -> bool;
+    fn get_size(&self) -> Vec2;
 }
-impl Play for Animation {
+impl AnimationMethods for Animation {
+    fn get_size(&self) -> Vec2 {
+        vec2(self.0[0].0.width(), self.0[0].0.height())
+    }
     fn play(&self, pos: Vec2, params: Option<DrawTextureParams>) {
         let mut time = (get_time() * 1000.0) % self.1 as f64;
         for i in &self.0 {

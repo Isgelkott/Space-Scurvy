@@ -49,11 +49,16 @@ pub struct Assets {
     pub energy_ball: Animation,
     pub spike_ball: Animation,
     pub laser: Animation,
+    pub machine_gunner: Animation,
 }
 
 impl Assets {
     fn new() -> Self {
         Self {
+            machine_gunner: load_animation_from_tag(
+                include_bytes!("../assets/machine_gunner.aseprite"),
+                "idle",
+            ),
             laser: load_animation_from_tag(include_bytes!("../assets/laser.aseprite"), "idle"),
             spike_ball: load_animation_from_tag(
                 include_bytes!("../assets/spikeball.aseprite"),

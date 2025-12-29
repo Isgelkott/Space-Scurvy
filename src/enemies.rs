@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::{collections::HashMap, f32::consts::PI, sync::LazyLock};
 
 use macroquad::prelude::*;
 
@@ -6,24 +6,27 @@ use crate::{
     assets::ASSETS,
     level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE},
     player::{self, Player},
-    utils::{Animation, Play},
+    utils::{Animation, AnimationMethods},
 };
 pub static ENEMY_IDS: LazyLock<HashMap<u8, PresetEnemies>> = LazyLock::new(|| {
     HashMap::from([
         (140, PresetEnemies::Jetpacker),
         (141, PresetEnemies::SpikeBall),
+        (142, PresetEnemies::MachineGunner),
     ])
 });
 #[derive(Clone, Copy)]
 pub enum PresetEnemies {
     Jetpacker,
     SpikeBall,
+    MachineGunner,
 }
 impl PresetEnemies {
     pub fn spawn(&self, pos: Vec2, map: &Level) -> Box<dyn Enemy> {
         match &self {
             Self::Jetpacker => Jetpacker::spawn(pos, map),
             Self::SpikeBall => SpikeBall::spawn(pos, map),
+            Self::MachineGunner => MachineGunner::spawn(pos, map),
             _ => todo!(),
         }
     }
@@ -89,7 +92,13 @@ impl StandardProjectile {
 impl Projectile for StandardProjectile {
     fn update(&mut self, player: &mut Player, map: &Level) {
         self.pos += self.direction.normalize_or_zero() * self.speed * get_frame_time();
-        self.animation.play(self.pos, None);
+        self.animation.play(
+            self.pos,
+            Some(DrawTextureParams {
+                rotation: self.direction.to_angle(),
+                ..Default::default()
+            }),
+        );
     }
 }
 pub trait Enemy {
@@ -102,13 +111,20 @@ pub trait Enemy {
 struct MachineGunner {
     pos: Vec2,
     clock: f32,
+    animation: &'static Animation,
+    size: Vec2,
 }
 impl Enemy for MachineGunner {
     fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
     where
         Self: Sized,
     {
-        Box::new(Self { pos, clock: 0.0 })
+        Box::new(Self {
+            size: ASSETS.machine_gunner.get_size(),
+            pos,
+            clock: 0.0,
+            animation: &ASSETS.machine_gunner,
+        })
     }
     fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
         let flipped: bool = if player.pos.x > self.pos.x {
@@ -120,17 +136,26 @@ impl Enemy for MachineGunner {
             projectiles.push(Box::new(StandardProjectile::new(
                 self.pos
                     + if flipped {
-                        vec2(-10.0, 0.0)
+                        vec2(10.0, 0.)
                     } else {
-                        vec2(10.0, 0.0)
+                        vec2(-10.0, 0.)
                     },
-                (player.pos - self.pos).normalize_or_zero(),
-                20.0,
+                ((player.pos + player.size / 2.0) - (self.pos + self.size.y / 2.0))
+                    .normalize_or_zero(),
+                40.0,
                 &ASSETS.laser,
             )));
+            self.clock = 0.0;
         } else {
             self.clock += get_frame_time();
         }
+        self.animation.play(
+            self.pos,
+            Some(DrawTextureParams {
+                flip_x: flipped,
+                ..Default::default()
+            }),
+        );
     }
 }
 struct SpikeBall {
