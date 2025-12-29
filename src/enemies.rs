@@ -33,7 +33,7 @@ impl PresetEnemies {
 }
 fn check_player_collision(pos: Vec2, size: Vec2, player: &Player) -> bool {
     if pos.x <= player.pos.x + player.size.x
-        && pos.x >= player.pos.x
+        && pos.x + size.x >= player.pos.x
         && pos.y >= player.pos.y
         && player.size.y + player.pos.y >= pos.y + size.y
     {
