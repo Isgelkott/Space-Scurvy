@@ -32,7 +32,7 @@ impl PresetEnemies {
     }
 }
 fn check_player_collision(pos: Vec2, size: Vec2, player: &Player) -> bool {
-    if pos.x + size.x <= player.pos.x + player.size.x
+    if pos.x <= player.pos.x + player.size.x
         && pos.x >= player.pos.x
         && pos.y >= player.pos.y
         && player.size.y + player.pos.y >= pos.y + size.y
@@ -44,6 +44,7 @@ fn check_player_collision(pos: Vec2, size: Vec2, player: &Player) -> bool {
 }
 pub trait Projectile {
     fn update(&mut self, player: &mut Player, map: &Level);
+    fn on_impact(&mut self, player: &mut Player) -> bool;
 }
 pub struct EnergyBall {
     animation: &'static Animation,
@@ -62,6 +63,14 @@ impl EnergyBall {
     }
 }
 impl Projectile for EnergyBall {
+    fn on_impact(&mut self, player: &mut Player) -> bool {
+        if check_player_collision(self.pos, self.size, player) {
+            player.hp = player.hp.saturating_sub(20);
+            true
+        } else {
+            false
+        }
+    }
     fn update(&mut self, player: &mut Player, map: &Level)
     where
         Self: Sized,
@@ -75,13 +84,22 @@ impl Projectile for EnergyBall {
 }
 struct StandardProjectile {
     pos: Vec2,
+    size: Vec2,
     direction: Vec2,
     speed: f32,
     animation: &'static Animation,
 }
 impl StandardProjectile {
-    fn new(pos: Vec2, direction: Vec2, speed: f32, animation: &'static Animation) -> Self {
+    fn new(
+        pos: Vec2,
+        size: Vec2,
+        direction: Vec2,
+        speed: f32,
+        animation: &'static Animation,
+    ) -> Self {
         Self {
+            size,
+
             pos,
             direction,
             speed,
@@ -99,6 +117,17 @@ impl Projectile for StandardProjectile {
                 ..Default::default()
             }),
         );
+        if check_player_collision(self.pos, self.size, player) {
+            player.hp = player.hp.saturating_sub(20);
+        }
+    }
+    fn on_impact(&mut self, player: &mut Player) -> bool {
+        if check_player_collision(self.pos, self.size, player) {
+            player.hp = player.hp.saturating_sub(20);
+            return true;
+        } else {
+            false
+        }
     }
 }
 pub trait Enemy {
@@ -136,10 +165,11 @@ impl Enemy for MachineGunner {
             projectiles.push(Box::new(StandardProjectile::new(
                 self.pos
                     + if flipped {
-                        vec2(10.0, 0.)
+                        vec2(8.5, 15.0)
                     } else {
-                        vec2(-10.0, 0.)
+                        vec2(-8.5, 15.0)
                     },
+                ASSETS.laser.get_size(),
                 ((player.pos + player.size / 2.0) - (self.pos + self.size.y / 2.0))
                     .normalize_or_zero(),
                 40.0,
@@ -275,7 +305,11 @@ pub fn update_projectiles(
     level: &Level,
     projectiles: &mut Vec<Box<dyn Projectile>>,
 ) {
-    for projectile in projectiles.iter_mut() {
-        projectile.update(player, level);
-    }
+    projectiles.retain_mut(|f| {
+        if f.on_impact(player) {
+            return false;
+        }
+        f.update(player, level);
+        return true;
+    });
 }
