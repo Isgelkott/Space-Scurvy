@@ -1,4 +1,3 @@
-use assets::*;
 use enemies::*;
 use level::*;
 use macroquad::prelude::*;
@@ -17,13 +16,14 @@ struct Game {
     camera: Camera2D,
     clock: f32,
     enemies: Vec<Box<dyn Enemy>>,
-    projectiles: Vec,
+    projectiles: Vec<Box<dyn Projectile>>,
 }
 impl Game {
     fn new() -> Self {
         let (map, special_data) = Level::new(Levels::TestLevel);
         dbg!(special_data.spawn_location);
         Self {
+            projectiles: Vec::new(),
             enemies: special_data.enemies,
             clock: 0.0,
             map,
@@ -59,7 +59,13 @@ impl Game {
 
         self.camera.target = self.player.pos;
         self.player.update(&self.map);
-        update_enemies(&mut self.enemies, &self.map);
+        update_enemies(
+            &self.player,
+            &mut self.enemies,
+            &self.map,
+            &mut self.projectiles,
+        );
+        update_projectiles(&mut self.player, &self.map, &mut self.projectiles);
         self.draw_camera();
     }
 }

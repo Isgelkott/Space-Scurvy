@@ -2,28 +2,6 @@ use macroquad::prelude::*;
 use std::sync::LazyLock;
 
 use crate::utils::*;
-pub struct Spritesheet {
-    spritesheet: Texture2D,
-    size: (f32, f32),
-}
-impl Spritesheet {
-    pub fn draw_from(&self, coord: (u8, u8), pos: Vec2, params: Option<DrawTextureParams>) {
-        let mut params = params.unwrap_or_default();
-        params.source = Some(Rect {
-            x: coord.0 as f32 * self.size.0,
-            y: coord.1 as f32 * self.size.1,
-            w: self.size.0,
-            h: self.size.1,
-        });
-        draw_texture_ex(&self.spritesheet, pos.x, pos.y, WHITE, params);
-    }
-    fn new(size: (f32, f32), texture: Texture2D) -> Self {
-        Self {
-            spritesheet: texture,
-            size,
-        }
-    }
-}
 
 pub struct TopPlayerAnimations {
     pub idle: Animation,
@@ -52,14 +30,14 @@ impl BotttomPlayerAnimations {
 }
 pub struct JetpackerAnimation {
     pub idle: Animation,
-    // pub fly: Animation,
+    pub fly: Animation,
 }
 impl JetpackerAnimation {
     fn new() -> Self {
         let data = include_bytes!("../assets/jetpacker.aseprite");
         Self {
             idle: load_animation_from_tag(data, "idle"),
-            // fly: load_animation_from_tag(data, "fly"),
+            fly: load_animation_from_tag(data, "fly"),
         }
     }
 }
@@ -68,11 +46,21 @@ pub struct Assets {
     pub top_player_animations: TopPlayerAnimations,
     pub bottom_player_animations: BotttomPlayerAnimations,
     pub jetpacker: JetpackerAnimation,
+    pub energy_ball: Animation,
+    pub spike_ball: Animation,
 }
 
 impl Assets {
     fn new() -> Self {
         Self {
+            spike_ball: load_animation_from_tag(
+                include_bytes!("../assets/spikeball.aseprite"),
+                "idle",
+            ),
+            energy_ball: load_animation_from_tag(
+                include_bytes!("../assets/energy_ball.aseprite"),
+                "idle",
+            ),
             jetpacker: JetpackerAnimation::new(),
             spritesheet: Spritesheet::new(
                 (16.0, 16.0),

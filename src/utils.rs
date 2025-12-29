@@ -2,7 +2,7 @@ use asefile::*;
 use image::*;
 use macroquad::prelude::*;
 
-use crate::level::{MAP_SCALE_FACTOR, TILE_SIZE};
+use crate::level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE};
 pub fn load_ase_texture(bytes: &[u8], layer: Option<u32>, frame: Option<u32>) -> Texture2D {
     let img = AsepriteFile::read(bytes).unwrap();
     let frame = frame.unwrap_or(0);
@@ -60,29 +60,43 @@ pub fn load_animation_from_tag(data: &[u8], tag: &str) -> (Vec<(Texture2D, u32)>
     }
     (frames, duration)
 }
+fn check_collision(pos: Vec2, map: &Level) -> bool {
+    let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
+    if map_pos.y as usize * map.width as usize + map_pos.x as usize > map.tiles.len() - 1 {
+        return false;
+    }
+    let pottential_collider =
+        &map.tiles[map_pos.y as usize * map.width as usize + map_pos.x as usize];
+    if pottential_collider
+        .data
+        .iter()
+        .any(|f| f.0 == Layer::Collision)
+    {
+        true
+    } else {
+        false
+    }
+}
 pub struct Spritesheet {
-    texture: Texture2D,
-    widht: f32,
-    height: f32,
+    spritesheet: Texture2D,
+    size: (f32, f32),
 }
 impl Spritesheet {
-    pub fn draw_from(&self, world_pos: Vec2, texture_coord: (u8, u8), scale: f32) {
-        draw_texture_ex(
-            &self.texture,
-            world_pos.x,
-            world_pos.y,
-            WHITE,
-            DrawTextureParams {
-                source: Some(Rect {
-                    x: texture_coord.0 as f32 * self.widht,
-                    y: texture_coord.1 as f32 * self.height,
-                    w: self.widht,
-                    h: self.height,
-                }),
-                dest_size: Some(vec2(self.widht, self.height) * scale),
-                ..Default::default()
-            },
-        )
+    pub fn draw_from(&self, coord: (u8, u8), pos: Vec2, params: Option<DrawTextureParams>) {
+        let mut params = params.unwrap_or_default();
+        params.source = Some(Rect {
+            x: coord.0 as f32 * self.size.0,
+            y: coord.1 as f32 * self.size.1,
+            w: self.size.0,
+            h: self.size.1,
+        });
+        draw_texture_ex(&self.spritesheet, pos.x, pos.y, WHITE, params);
+    }
+    pub fn new(size: (f32, f32), texture: Texture2D) -> Self {
+        Self {
+            spritesheet: texture,
+            size,
+        }
     }
 }
 pub type Animation = (Vec<(Texture2D, u32)>, u32);

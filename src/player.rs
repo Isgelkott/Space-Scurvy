@@ -1,34 +1,14 @@
 use crate::{
     assets::ASSETS,
-    level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE, Tile},
+    level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE},
     utils::{Animation, *},
 };
 use macroquad::prelude::*;
 
-fn check_collision(pos: Vec2, map: &Level) -> Option<Vec2> {
-    let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
-    if map_pos.y as usize * map.width as usize + map_pos.x as usize > map.tiles.len() - 1 {
-        return None;
-    }
-    let pottential_collider =
-        &map.tiles[map_pos.y as usize * map.width as usize + map_pos.x as usize];
-    if pottential_collider
-        .data
-        .iter()
-        .any(|f| f.0 == Layer::Collision)
-    {
-        let x0 = map_pos.x.floor() * TILE_SIZE * MAP_SCALE_FACTOR;
-        let x1 = (map_pos.x.floor() + 1.0) * MAP_SCALE_FACTOR * TILE_SIZE;
-        let y0 = map_pos.y.floor() * TILE_SIZE * MAP_SCALE_FACTOR;
-        let y1 = map_pos.y.ceil() * MAP_SCALE_FACTOR * TILE_SIZE;
-        Some(vec2(pos.x.clamp(x0, x1), pos.y.clamp(y0, y1)))
-    } else {
-        None
-    }
-}
 pub struct Player {
+    pub hp: u32,
     pub pos: Vec2,
-    size: Vec2,
+    pub size: Vec2,
     velocity: Vec2,
     grounded: bool,
     speed: f32,
@@ -40,6 +20,7 @@ const GRAVITY: f32 = 3.5;
 impl Player {
     pub fn new(pos: Vec2) -> Self {
         Self {
+            hp: 100,
             previous_flipped: true,
             current_top_animation: None,
             grounded: false,
@@ -73,12 +54,6 @@ impl Player {
             params.flip_x = false;
             bot_animation = &ASSETS.bottom_player_animations.walk;
         }
-        if is_key_down(KeyCode::S) {
-            direction.y = 1.0;
-        }
-        if is_key_down(KeyCode::W) {
-            direction.y = -1.0;
-        }
 
         if self.grounded {
             self.velocity = direction.normalize_or_zero() * self.speed;
@@ -109,7 +84,7 @@ impl Player {
             } else {
                 vec2(map_pos.x, map_pos.y)
             };
-            let mut tile_no = map_pos.y as usize * map.width as usize + map_pos.x as usize;
+            let tile_no = map_pos.y as usize * map.width as usize + map_pos.x as usize;
 
             if tile_no > map.tiles.len() - 1 {
                 println!("out of bounds");
@@ -128,20 +103,11 @@ impl Player {
                 let y1 = (map_pos.y.floor() + 1.0) * MAP_SCALE_FACTOR * TILE_SIZE - point.1;
                 let mut clamped_x = false;
                 let wa = if self.pos.x == x0 { true } else { false };
-                if index < 4 {
+                if index < 4 || self.pos.y != y0 {
                     self.pos.x = self.pos.x.clamp(x0, x1);
                     if self.pos.x == x0 || self.pos.x == x1 && !wa {
                         clamped_x = true;
                         self.velocity.x = 0.0;
-                    }
-                } else if self.pos.y != y0 {
-                    {
-                        self.pos.x = self.pos.x.clamp(x0, x1);
-                        if self.pos.x == x0 || self.pos.x == x1 && !wa {
-                            clamped_x = true;
-
-                            self.velocity.x = 0.0;
-                        }
                     }
                 }
 
@@ -156,9 +122,16 @@ impl Player {
         }
         self.grounded = grounded;
 
-        if let Some((top_animation, animation_clock)) = &mut self.current_top_animation {
-            if !top_animation.play_with_clock(self.pos, Some(params.clone()), animation_clock) {
+        if let Some((current_top_animation, animation_clock)) = &mut self.current_top_animation {
+            if current_top_animation.1 as f32 / 1000.0 < *animation_clock {
+                self.current_top_animation = None;
                 top_animation.play(self.pos, Some(params.clone()));
+            } else {
+                current_top_animation.play_with_clock(
+                    self.pos,
+                    Some(params.clone()),
+                    animation_clock,
+                );
             }
         } else {
             top_animation.play(self.pos, Some(params.clone()));

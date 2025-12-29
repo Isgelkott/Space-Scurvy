@@ -1,6 +1,6 @@
 use crate::{
     assets::ASSETS,
-    enemies::{Enemy, PresetEnemies},
+    enemies::{ENEMY_IDS, Enemy, PresetEnemies},
 };
 use macroquad::prelude::*;
 use std::{collections::HashMap, sync::LazyLock};
@@ -205,8 +205,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
     }
     ((tiles, (width + 1) as u32), special_data)
 }
-static ENEMY_IDS: LazyLock<HashMap<u8, PresetEnemies>> =
-    LazyLock::new(|| HashMap::from([(140, PresetEnemies::Jetpacker)]));
+
 pub enum Levels {
     TestLevel,
 }
