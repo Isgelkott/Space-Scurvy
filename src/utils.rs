@@ -60,7 +60,26 @@ pub fn load_animation_from_tag(data: &[u8], tag: &str) -> (Vec<(Texture2D, u32)>
     }
     (frames, duration)
 }
-fn check_collision(pos: Vec2, map: &Level) -> bool {
+pub fn load_animation(data: &[u8]) -> (Vec<(Texture2D, u32)>, u32) {
+    let file = AsepriteFile::read(data).unwrap();
+    let mut frames = Vec::new();
+    let mut duration = 0;
+    for frame in 0..file.num_frames() {
+        let img = file.frame(frame);
+        let time = img.duration();
+        duration += time;
+        let img = img.image();
+        let texture = Texture2D::from_image(&Image {
+            width: img.width() as u16,
+            height: img.height() as u16,
+            bytes: img.as_bytes().to_vec(),
+        });
+        texture.set_filter(FilterMode::Nearest);
+        frames.push((texture, time));
+    }
+    (frames, duration)
+}
+pub fn check_collision(pos: Vec2, map: &Level) -> bool {
     let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
     if map_pos.y as usize * map.width as usize + map_pos.x as usize > map.tiles.len() - 1 {
         return false;

@@ -3,10 +3,11 @@ use std::{collections::HashMap, f32::consts::PI, sync::LazyLock};
 use macroquad::prelude::*;
 
 use crate::{
-    assets::ASSETS,
+    assets::{ASSETS, Assets},
     level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE},
+    particles::{Particle, StandardParticle},
     player::{self, Player},
-    utils::{Animation, AnimationMethods},
+    utils::{Animation, AnimationMethods, check_collision},
 };
 pub static ENEMY_IDS: LazyLock<HashMap<u8, PresetEnemies>> = LazyLock::new(|| {
     HashMap::from([
@@ -27,7 +28,6 @@ impl PresetEnemies {
             Self::Jetpacker => Jetpacker::spawn(pos, map),
             Self::SpikeBall => SpikeBall::spawn(pos, map),
             Self::MachineGunner => MachineGunner::spawn(pos, map),
-            _ => todo!(),
         }
     }
 }
@@ -42,9 +42,19 @@ fn check_player_collision(pos: Vec2, size: Vec2, player: &Player) -> bool {
         false
     }
 }
+fn check_projectile_collision(pos: Vec2, size: Vec2, map: &Level) -> bool {
+    let points = [
+        vec2(pos.x, pos.y),
+        vec2(pos.x + size.x, pos.y),
+        vec2(pos.x, pos.y + size.y),
+        vec2(pos.x + size.x, pos.y + size.y),
+    ];
+    return points.iter().any(|f| check_collision(*f, map));
+}
 pub trait Projectile {
     fn update(&mut self, player: &mut Player, map: &Level);
-    fn on_impact(&mut self, player: &mut Player) -> bool;
+    fn check_player_impact(&mut self, player: &mut Player) -> bool;
+    fn map_collision(&self, map: &Level) -> Option<Box<dyn Particle>>;
 }
 pub struct EnergyBall {
     animation: &'static Animation,
@@ -62,8 +72,19 @@ impl EnergyBall {
         }
     }
 }
+
 impl Projectile for EnergyBall {
-    fn on_impact(&mut self, player: &mut Player) -> bool {
+    fn map_collision(&self, map: &Level) -> Option<Box<dyn Particle>> {
+        if check_projectile_collision(self.pos, self.size, map) {
+            Some(Box::new(StandardParticle::from_animation(
+                self.pos + self.size / 2.0,
+                &ASSETS.energy_ball_shatter,
+            )))
+        } else {
+            None
+        }
+    }
+    fn check_player_impact(&mut self, player: &mut Player) -> bool {
         if check_player_collision(self.pos, self.size, player) {
             player.hp = player.hp.saturating_sub(20);
             true
@@ -108,6 +129,9 @@ impl StandardProjectile {
     }
 }
 impl Projectile for StandardProjectile {
+    fn map_collision(&self, map: &Level) -> Option<Box<dyn Particle>> {
+        None
+    }
     fn update(&mut self, player: &mut Player, map: &Level) {
         self.pos += self.direction.normalize_or_zero() * self.speed * get_frame_time();
         self.animation.play(
@@ -117,13 +141,10 @@ impl Projectile for StandardProjectile {
                 ..Default::default()
             }),
         );
-        if check_player_collision(self.pos, self.size, player) {
-            player.hp = player.hp.saturating_sub(20);
-        }
     }
-    fn on_impact(&mut self, player: &mut Player) -> bool {
+    fn check_player_impact(&mut self, player: &mut Player) -> bool {
         if check_player_collision(self.pos, self.size, player) {
-            player.hp = player.hp.saturating_sub(20);
+            player.damage(20);
             return true;
         } else {
             false
@@ -304,9 +325,14 @@ pub fn update_projectiles(
     player: &mut Player,
     level: &Level,
     projectiles: &mut Vec<Box<dyn Projectile>>,
+    particles: &mut Vec<Box<dyn Particle>>,
 ) {
     projectiles.retain_mut(|f| {
-        if f.on_impact(player) {
+        if f.check_player_impact(player) {
+            return false;
+        }
+        if let Some(particle) = f.map_collision(level) {
+            particles.push(particle);
             return false;
         }
         f.update(player, level);

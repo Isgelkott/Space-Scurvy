@@ -3,9 +3,12 @@ use level::*;
 use macroquad::prelude::*;
 use player::*;
 use utils::*;
+
+use crate::particles::{Particle, update_particles};
 mod assets;
 mod enemies;
 mod level;
+mod particles;
 mod player;
 mod utils;
 const SCREEN_SIZE: (f32, f32) = (200.0, 200.0);
@@ -14,9 +17,9 @@ struct Game {
     map: Level,
     player: Player,
     camera: Camera2D,
-    clock: f32,
     enemies: Vec<Box<dyn Enemy>>,
     projectiles: Vec<Box<dyn Projectile>>,
+    particles: Vec<Box<dyn Particle>>,
 }
 impl Game {
     fn new() -> Self {
@@ -26,9 +29,9 @@ impl Game {
             enemies.push(enemy.0.spawn(enemy.1, &map))
         }
         Self {
+            particles: Vec::new(),
             projectiles: Vec::new(),
             enemies,
-            clock: 0.0,
             map,
             player: Player::new(special_data.spawn_location),
             camera: create_camera(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1)),
@@ -68,7 +71,13 @@ impl Game {
             &self.map,
             &mut self.projectiles,
         );
-        update_projectiles(&mut self.player, &self.map, &mut self.projectiles);
+        update_projectiles(
+            &mut self.player,
+            &self.map,
+            &mut self.projectiles,
+            &mut self.particles,
+        );
+        update_particles(&mut self.particles);
         self.draw_camera();
     }
 }

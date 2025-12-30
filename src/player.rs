@@ -18,6 +18,9 @@ pub struct Player {
 const AIR_DRAG: f32 = 0.8;
 const GRAVITY: f32 = 3.5;
 impl Player {
+    pub fn damage(&mut self, dmg: u32) {
+        self.hp = self.hp.saturating_sub(dmg);
+    }
     pub fn new(pos: Vec2) -> Self {
         Self {
             hp: 100,
