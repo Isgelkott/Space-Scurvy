@@ -1,8 +1,11 @@
+use crate::level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE};
 use asefile::*;
 use image::*;
-use macroquad::prelude::*;
-
-use crate::level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE};
+use macroquad::{
+    miniquad::{BlendFactor, BlendState, BlendValue, Equation},
+    prelude::*,
+};
+use std::sync::LazyLock;
 pub fn load_ase_texture(bytes: &[u8], layer: Option<u32>, frame: Option<u32>) -> Texture2D {
     let img = AsepriteFile::read(bytes).unwrap();
     let frame = frame.unwrap_or(0);
@@ -119,13 +122,77 @@ impl Spritesheet {
     }
 }
 pub type Animation = (Vec<(Texture2D, u32)>, u32);
+const DEFAULT_FRAGMENT_SHADER: &'static str = "#version 100
+precision lowp float;
+
+varying vec2 uv;
+
+uniform sampler2D Texture;
+
+void main() {
+    gl_FragColor = texture2D(Texture, uv);
+}
+";
+const BULLET_SHADER: &'static str = "#version 100
+precision lowp float;
+
+uniform lowp float alpha; 
+varying vec2 uv;
+void main() {
+    gl_FragColor = vec4(0.0,0.0,0.0,alpha*uv.x*100.0);
+}
+";
+pub static BULLET_MATERIAL: LazyLock<Material> = std::sync::LazyLock::new(|| {
+    let pipeline = PipelineParams {
+        alpha_blend: Some(BlendState::new(
+            Equation::Add,
+            BlendFactor::Value(BlendValue::SourceAlpha),
+            BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
+        )),
+        color_blend: Some(BlendState::new(
+            Equation::Add,
+            BlendFactor::Value(BlendValue::SourceAlpha),
+            BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
+        )),
+        ..Default::default()
+    };
+    load_material(
+        ShaderSource::Glsl {
+            vertex: DEFAULT_VERTEX_SHADER,
+            fragment: BULLET_SHADER,
+        },
+        MaterialParams {
+            pipeline_params: pipeline,
+            uniforms: vec![UniformDesc::new("alpha", UniformType::Float1)],
+            ..Default::default()
+        },
+    )
+    .unwrap()
+});
+
+const DEFAULT_VERTEX_SHADER: &'static str = "#version 100
+precision lowp float;
+
+attribute vec3 position;
+attribute vec2 texcoord;
+
+varying vec2 uv;
+
+uniform mat4 Model;
+uniform mat4 Projection;
+
+void main() {
+    gl_Position = Projection * Model * vec4(position, 1);
+    uv = texcoord;
+}
+";
 pub trait AnimationMethods {
     fn play(&self, pos: Vec2, params: Option<DrawTextureParams>);
     fn play_with_clock(
         &self,
         pos: Vec2,
-        params: Option<DrawTextureParams>,
         clock: &mut f32,
+        params: Option<DrawTextureParams>,
     ) -> bool;
     fn get_size(&self) -> Vec2;
 }
@@ -147,8 +214,8 @@ impl AnimationMethods for Animation {
     fn play_with_clock(
         &self,
         pos: Vec2,
-        params: Option<DrawTextureParams>,
         clock: &mut f32,
+        params: Option<DrawTextureParams>,
     ) -> bool {
         let wa = (*clock * 1000.0) as u32;
         if wa < self.1 {

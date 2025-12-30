@@ -5,12 +5,14 @@ use crate::utils::*;
 
 pub struct TopPlayerAnimations {
     pub idle: Animation,
+    pub shoot: Animation,
 }
 
 impl TopPlayerAnimations {
     fn new() -> Self {
         let data = include_bytes!("../assets/pirate.aseprite");
         Self {
+            shoot: load_animation_from_tag(data, "shoot"),
             idle: load_animation_from_tag(data, "idle_top"),
         }
     }

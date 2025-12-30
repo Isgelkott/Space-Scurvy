@@ -1,5 +1,6 @@
 use crate::{
     assets::ASSETS,
+    enemies::{Bullet, Projectile},
     level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE},
     utils::{Animation, *},
 };
@@ -38,7 +39,7 @@ impl Player {
         }
     }
 
-    pub fn update(&mut self, map: &Level) {
+    pub fn update(&mut self, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
         let mut top_animation: &Animation = &ASSETS.top_player_animations.idle;
         let mut params = DrawTextureParams {
             flip_x: self.previous_flipped,
@@ -66,7 +67,6 @@ impl Player {
         } else {
             self.velocity.x = direction.normalize_or_zero().x * self.speed * AIR_DRAG;
         }
-        // draw_rectangle(self.pos.x, self.pos.y, self.size.x, self.size.y, WHITE);
 
         let collision_points = [
             (0.0, 0.0),
@@ -132,8 +132,8 @@ impl Player {
             } else {
                 current_top_animation.play_with_clock(
                     self.pos,
-                    Some(params.clone()),
                     animation_clock,
+                    Some(params.clone()),
                 );
             }
         } else {
@@ -141,6 +141,21 @@ impl Player {
         };
 
         bot_animation.play(self.pos, Some(params.clone()));
+        if is_key_pressed(KeyCode::F) {
+            self.current_top_animation = Some((&ASSETS.top_player_animations.shoot, 0.0));
+            projectiles.push(Box::new(Bullet::new(
+                self.pos
+                    + vec2(
+                        if !params.flip_x {
+                            self.size.x - 2.0
+                        } else {
+                            2.0
+                        },
+                        14.0,
+                    ),
+                vec2(if !params.flip_x { 1.0 } else { -1.0 }, 0.0),
+            )));
+        }
         self.pos += self.velocity * get_frame_time();
         self.previous_flipped = params.flip_x;
     }
