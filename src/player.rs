@@ -82,13 +82,11 @@ impl Player {
             // SO JANK PLS FORGIVE
             let map_pos = (self.pos + self.velocity * get_frame_time() + vec2(point.0, point.1))
                 / (TILE_SIZE * MAP_SCALE_FACTOR);
-            let map_pos = if map_pos.x.floor() == map_pos.x && index % 2 == 1 {
-                vec2(map_pos.x - 1.0, map_pos.y)
-            } else {
-                vec2(map_pos.x, map_pos.y)
-            };
-            let tile_no = map_pos.y as usize * map.width as usize + map_pos.x as usize;
 
+            let mut tile_no = map_pos.y as usize * map.width as usize + map_pos.x as usize;
+            if map_pos.x.floor() == map_pos.x && index % 2 == 1 {
+                tile_no -= 1;
+            }
             if tile_no > map.tiles.len() - 1 {
                 println!("out of bounds");
                 break;
@@ -141,6 +139,8 @@ impl Player {
         };
 
         bot_animation.play(self.pos, Some(params.clone()));
+
+        self.pos += self.velocity * get_frame_time();
         if is_key_pressed(KeyCode::F) {
             self.current_top_animation = Some((&ASSETS.top_player_animations.shoot, 0.0));
             projectiles.push(Box::new(Bullet::new(
@@ -156,7 +156,6 @@ impl Player {
                 vec2(if !params.flip_x { 1.0 } else { -1.0 }, 0.0),
             )));
         }
-        self.pos += self.velocity * get_frame_time();
         self.previous_flipped = params.flip_x;
     }
 }

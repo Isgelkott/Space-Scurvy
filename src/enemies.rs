@@ -4,6 +4,7 @@ use macroquad::prelude::*;
 
 use crate::{
     assets::{ASSETS, Assets},
+    enemies,
     level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE},
     particles::{Particle, StandardParticle},
     player::{self, Player},
@@ -42,7 +43,7 @@ fn check_player_collision(pos: Vec2, size: Vec2, player: &Player) -> bool {
         false
     }
 }
-fn check_collision_with_size(pos: Vec2, size: Vec2, map: &Level) -> bool {
+fn check_map_collision(pos: Vec2, size: Vec2, map: &Level) -> bool {
     let points = [
         vec2(pos.x, pos.y),
         vec2(pos.x + size.x, pos.y),
@@ -51,32 +52,69 @@ fn check_collision_with_size(pos: Vec2, size: Vec2, map: &Level) -> bool {
     ];
     return points.iter().any(|f| check_collision(*f, map));
 }
-fn check_projectile_collision(
+fn check_collision_with_size(obj1: (Vec2, Vec2), obj2: (Vec2, Vec2)) -> bool {
+    let points = [
+        vec2(obj1.0.x, obj1.0.y),
+        vec2(obj1.0.x + obj1.1.x, obj1.0.y),
+        vec2(obj1.0.x, obj1.0.y + obj1.1.y),
+        vec2(obj1.0.x + obj1.1.x, obj1.0.y + obj1.1.y),
+    ];
+    return points.iter().any(|f| {
+        f.x >= obj2.0.x
+            && f.x <= obj2.0.x + obj2.1.x
+            && f.y >= obj2.0.y
+            && f.y <= obj2.1.y + obj2.0.y
+    });
+}
+fn check_projectile_collision<'a>(
     pos: Vec2,
     size: Vec2,
     map: &Level,
     player: &Player,
-) -> Option<CollisionType> {
+    enemies: &'a mut Vec<Box<dyn Enemy>>,
+) -> Option<CollisionType<'a>> {
     if check_player_collision(pos, size, player) {
         return Some(CollisionType::Player);
-    } else if check_collision_with_size(pos, size, map) {
+    } else if check_map_collision(pos, size, map) {
         return Some(CollisionType::Map);
     } else {
+        for enemy in enemies {
+            let bounds = enemy.get_bounds();
+            if check_collision_with_size((pos, size), bounds) {
+                println!("wa");
+                return Some(CollisionType::Enemy(enemy));
+            }
+        }
+
         return None;
     }
 }
-#[derive(PartialEq)]
-pub enum CollisionType {
+
+pub enum CollisionType<'a> {
     Player,
     Map,
+    Enemy(&'a mut Box<dyn Enemy>),
+}
+impl<'a> CollisionType<'a> {
+    fn is_same(&self, obj2: &Self) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(obj2)
+    }
 }
 pub trait Projectile {
     fn update(&mut self, player: &mut Player, map: &Level);
     fn particle(&self) -> Option<Box<dyn Particle>> {
         None
     }
-    fn collision(&self, map: &Level, player: &Player) -> Option<CollisionType>;
-    fn on_player_impact(&self, player: &mut Player) {}
+    fn collision<'a>(
+        &self,
+        map: &Level,
+        player: &Player,
+        enemies: &'a mut Vec<Box<dyn Enemy>>,
+    ) -> Option<CollisionType<'a>>;
+    fn on_player_impact(&self, player: &mut Player) -> bool {
+        true
+    }
+    fn on_enemy_impact(&self, enemy: &mut dyn Enemy) {}
 }
 pub struct Bullet {
     pos: Vec2,
@@ -95,19 +133,23 @@ impl Bullet {
     }
 }
 impl Projectile for Bullet {
-    fn collision(&self, map: &Level, player: &Player) -> Option<CollisionType> {
-        let collision = check_projectile_collision(self.pos, Vec2::ZERO, map, player);
-        if let Some(collision) = collision {
-            if collision != CollisionType::Player {
-                println!("kms");
-                return Some(collision);
-            }
-        }
-        return None;
+    fn on_enemy_impact(&self, enemy: &mut dyn Enemy) {
+        enemy.on_hit_by_player();
+    }
+    fn on_player_impact(&self, _player: &mut Player) -> bool {
+        false
+    }
+    fn collision<'a>(
+        &self,
+        map: &Level,
+        player: &Player,
+        enemies: &'a mut Vec<Box<dyn Enemy>>,
+    ) -> Option<CollisionType<'a>> {
+        let collision = check_projectile_collision(self.pos, Vec2::ZERO, map, player, enemies);
+        return collision;
     }
 
-    fn update(&mut self, player: &mut Player, map: &Level) {
-        println!("wa");
+    fn update(&mut self, _player: &mut Player, map: &Level) {
         self.pos += self.direction * self.speed * get_frame_time();
         gl_use_material(&BULLET_MATERIAL);
         BULLET_MATERIAL.set_uniform("alpha", 1.0 / (self.pos.x - self.origin.x).abs());
@@ -145,10 +187,15 @@ impl Projectile for EnergyBall {
             &ASSETS.energy_ball_shatter,
         )))
     }
-    fn collision(&self, map: &Level, player: &Player) -> Option<CollisionType> {
+    fn collision<'a>(
+        &self,
+        map: &Level,
+        player: &Player,
+        enemies: &'a mut Vec<Box<dyn Enemy + 'static>>,
+    ) -> Option<CollisionType<'a>> {
         if check_player_collision(self.pos, self.size, player) {
             return Some(CollisionType::Player);
-        } else if check_collision_with_size(self.pos, self.size, map) {
+        } else if check_map_collision(self.pos, self.size, map) {
             return Some(CollisionType::Map);
         } else {
             return None;
@@ -192,7 +239,7 @@ impl StandardProjectile {
     }
 }
 impl Projectile for StandardProjectile {
-    fn update(&mut self, player: &mut Player, map: &Level) {
+    fn update(&mut self, _player: &mut Player, _map: &Level) {
         self.pos += self.direction.normalize_or_zero() * self.speed * get_frame_time();
         self.animation.play(
             self.pos,
@@ -202,16 +249,24 @@ impl Projectile for StandardProjectile {
             }),
         );
     }
-    fn collision(&self, map: &Level, player: &Player) -> Option<CollisionType> {
-        check_projectile_collision(self.pos, self.size, map, player)
+    fn collision<'a>(
+        &self,
+        map: &Level,
+        player: &Player,
+        enemies: &'a mut Vec<Box<dyn Enemy>>,
+    ) -> Option<CollisionType<'a>> {
+        check_projectile_collision(self.pos, self.size, map, player, enemies)
     }
 }
+
 pub trait Enemy {
+    fn get_bounds(&self) -> (Vec2, Vec2);
     fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
     where
         Self: Sized;
 
     fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>);
+    fn on_hit_by_player(&mut self) {}
 }
 struct MachineGunner {
     pos: Vec2,
@@ -220,6 +275,9 @@ struct MachineGunner {
     size: Vec2,
 }
 impl Enemy for MachineGunner {
+    fn get_bounds(&self) -> (Vec2, Vec2) {
+        (self.pos, self.size)
+    }
     fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
     where
         Self: Sized,
@@ -266,28 +324,52 @@ impl Enemy for MachineGunner {
 }
 struct SpikeBall {
     pos: Vec2,
+    size: Vec2,
 }
 impl Enemy for SpikeBall {
+    fn get_bounds(&self) -> (Vec2, Vec2) {
+        (self.pos, self.size)
+    }
     fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
     where
         Self: Sized,
     {
-        Box::new(Self { pos })
+        Box::new(Self {
+            pos,
+            size: ASSETS.spike_ball.get_size(),
+        })
     }
     fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
         self.pos += (player.pos - self.pos).normalize() * 10.0 * get_frame_time();
         let _ = &ASSETS.spike_ball.play(self.pos, None);
     }
 }
+#[derive(Debug)]
+enum JetpackerState {
+    Normal,
+    Hit,
+    Lie,
+    Getup,
+    Fall,
+}
 struct Jetpacker {
+    size: Vec2,
     origin: Vec2,
-    clock: f32,
     attacked: bool,
     flipped: bool,
     behavior_curve: [(f32, f32, &'static Animation, bool); 6],
+    state: (JetpackerState, f32),
+    fall_velocity: f32,
+    pos: Vec2,
 }
 
 impl Enemy for Jetpacker {
+    fn get_bounds(&self) -> (Vec2, Vec2) {
+        (self.pos, self.size)
+    }
+    fn on_hit_by_player(&mut self) {
+        self.state = (JetpackerState::Hit, 0.0);
+    }
     fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
     where
         Self: Sized,
@@ -304,66 +386,129 @@ impl Enemy for Jetpacker {
         let flight_time = (fly_height / flight_speed).abs();
         dbg!(flight_time);
         let curve: [(f32, f32, &Animation, bool); 6] = [
-            (0.0, 0.0, &ASSETS.jetpacker.fly, false),
-            (flight_time, fly_height, &ASSETS.jetpacker.fly, false),
-            (flight_time + 2.5, fly_height, &ASSETS.jetpacker.fly, true),
-            (flight_time + 4.0, fly_height, &ASSETS.jetpacker.fly, false),
-            (flight_time + 5.0, 0.0, &ASSETS.jetpacker.idle, false),
-            (flight_time + 7.0, 0.0, &ASSETS.jetpacker.idle, false),
+            (0.0, 0.0, &ASSETS.jetpacker.idle, false),
+            (1.5, 0.0, &ASSETS.jetpacker.fly, false),
+            (flight_time + 1.5, fly_height, &ASSETS.jetpacker.fly, false),
+            (
+                flight_time + 2.5 + 1.5,
+                fly_height,
+                &ASSETS.jetpacker.fly,
+                true,
+            ),
+            (
+                flight_time + 4.0 + 1.5,
+                fly_height,
+                &ASSETS.jetpacker.fly,
+                false,
+            ),
+            (flight_time + 5.0 + 1.5, 0.0, &ASSETS.jetpacker.fly, false),
         ];
         Box::new(Self {
+            state: (JetpackerState::Normal, 0.0),
+            size: ASSETS.jetpacker.fly.get_size(),
+            fall_velocity: 0.0,
+
             behavior_curve: curve,
             flipped: false,
             attacked: false,
-            clock: 0.0,
             origin: pos,
+            pos: pos,
         })
     }
     fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
-        self.flipped = if player.pos.x > self.origin.x {
-            true
-        } else {
-            false
-        };
-
-        if self.clock + get_frame_time() > self.behavior_curve.last().unwrap().0 {
-            self.clock = 0.0;
-            self.attacked = false;
-        } else {
-            self.clock += get_frame_time();
+        self.state.1 += get_frame_time();
+        if self.pos.y > self.origin.y {
+            self.pos = self.origin;
+            self.fall_velocity = 0.0;
+            self.state = (JetpackerState::Lie, 0.0);
         }
-        let mut last = self.behavior_curve.last().unwrap();
-        let time = self.clock;
-        for p in self.behavior_curve.iter().rev() {
-            if time >= p.0 {
-                let k = (last.1 - p.1) / (last.0 - p.0);
-                let pos = vec2(
-                    self.origin.x,
-                    self.origin.y + if !k.is_infinite() { k } else { 0.0 } * (time - p.0) + p.1,
+        let params = DrawTextureParams {
+            flip_x: self.flipped,
+            ..Default::default()
+        };
+        match self.state.0 {
+            JetpackerState::Fall => {
+                self.fall_velocity += 2.0;
+                ASSETS.jetpacker.fall.play(self.pos, Some(params.clone()));
+            }
+            JetpackerState::Getup => {
+                ASSETS.jetpacker.getup.play_with_clock(
+                    self.pos,
+                    &mut self.state.1,
+                    Some(params.clone()),
                 );
-                p.2.play(
-                    pos,
-                    Some(DrawTextureParams {
-                        flip_x: self.flipped,
-                        ..Default::default()
-                    }),
-                );
-                if p.3 && !self.attacked {
-                    self.attacked = true;
-                    projectiles.push(Box::new(EnergyBall::new(
-                        pos + if self.flipped {
-                            vec2(10.0, 0.0)
-                        } else {
-                            vec2(-10.0, 0.0)
-                        } + vec2(0.0, 5.0),
-                        self.flipped,
-                    )));
+                if self.state.1 > ASSETS.jetpacker.getup.1 as f32 / 1000.0 {
+                    self.state = (JetpackerState::Normal, 0.0)
                 }
-                break;
-            } else {
-                last = p
+            }
+            JetpackerState::Hit => {
+                ASSETS.jetpacker.hit.play_with_clock(
+                    self.pos,
+                    &mut self.state.1,
+                    Some(params.clone()),
+                );
+                if self.state.1 > ASSETS.jetpacker.hit.1 as f32 / 1000.0 {
+                    self.state = (JetpackerState::Fall, 0.0)
+                }
+            }
+            JetpackerState::Normal => {
+                self.flipped = if player.pos.x > self.origin.x {
+                    true
+                } else {
+                    false
+                };
+
+                if self.state.1 + get_frame_time() > self.behavior_curve.last().unwrap().0 {
+                    self.state.1 = 0.0;
+                    self.attacked = false;
+                }
+                let mut last = self.behavior_curve.last().unwrap();
+                let time = self.state.1;
+                for p in self.behavior_curve.iter().rev() {
+                    if time >= p.0 {
+                        let k = (last.1 - p.1) / (last.0 - p.0);
+                        self.pos = vec2(
+                            self.origin.x,
+                            self.origin.y
+                                + if !k.is_infinite() { k } else { 0.0 } * (time - p.0)
+                                + p.1,
+                        );
+                        p.2.play(
+                            self.pos,
+                            Some(DrawTextureParams {
+                                flip_x: self.flipped,
+                                ..Default::default()
+                            }),
+                        );
+                        if p.3 && !self.attacked {
+                            self.attacked = true;
+                            projectiles.push(Box::new(EnergyBall::new(
+                                self.pos
+                                    + if self.flipped {
+                                        vec2(10.0, 0.0)
+                                    } else {
+                                        vec2(-10.0, 0.0)
+                                    }
+                                    + vec2(0.0, 5.0),
+                                self.flipped,
+                            )));
+                        }
+                        break;
+                    } else {
+                        last = p
+                    }
+                }
+            }
+            JetpackerState::Lie => {
+                ASSETS.jetpacker.fall.play(self.pos, Some(params.clone()));
+                if self.state.1 > ASSETS.jetpacker.fall.1 as f32 / 1000.0 {
+                    self.state = (JetpackerState::Getup, 0.0)
+                }
+                dbg!(&self.state);
             }
         }
+
+        self.pos.y += self.fall_velocity * get_frame_time();
     }
 }
 pub fn update_enemies(
@@ -381,17 +526,26 @@ pub fn update_projectiles(
     level: &Level,
     projectiles: &mut Vec<Box<dyn Projectile>>,
     particles: &mut Vec<Box<dyn Particle>>,
+    enemies: &mut Vec<Box<dyn Enemy>>,
 ) {
     projectiles.retain_mut(|f| {
-        if let Some(collision) = f.collision(level, player) {
+        if let Some(collision) = f.collision(level, player, enemies) {
             if let Some(particle) = f.particle() {
                 particles.push(particle)
             }
-            if collision == CollisionType::Player {
-                f.on_player_impact(player);
+            if collision.is_same(&CollisionType::Player) {
+                if f.on_player_impact(player) {
+                    return false;
+                }
+            } else if collision.is_same(&CollisionType::Map) {
+                return false;
+            } else {
+                if let CollisionType::Enemy(enemy) = collision {
+                    enemy.on_hit_by_player();
+                    dbg!("wa");
+                    return false;
+                }
             }
-            println!("killed");
-            return false;
         }
 
         f.update(player, level);

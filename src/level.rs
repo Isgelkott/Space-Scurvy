@@ -11,16 +11,16 @@ pub enum Layer {
     Collision,
     Decor,
     Enemies,
-    Actuators,
+    Special,
     Path,
 }
 impl Layer {
     fn from_str(input: &str) -> Self {
         match input {
             "collision" => Self::Collision,
-            "decor" => Self::Decor,
+            input if input.contains("decor") => Self::Decor,
             "enemies" => Self::Enemies,
-            "actuators" => Self::Actuators,
+            "special" => Self::Special,
             "path" => Self::Path,
             _ => panic!("no layer named {}", input),
         }

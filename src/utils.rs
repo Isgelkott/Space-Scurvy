@@ -188,12 +188,7 @@ void main() {
 ";
 pub trait AnimationMethods {
     fn play(&self, pos: Vec2, params: Option<DrawTextureParams>);
-    fn play_with_clock(
-        &self,
-        pos: Vec2,
-        clock: &mut f32,
-        params: Option<DrawTextureParams>,
-    ) -> bool;
+    fn play_with_clock(&self, pos: Vec2, clock: &mut f32, params: Option<DrawTextureParams>);
     fn get_size(&self) -> Vec2;
 }
 impl AnimationMethods for Animation {
@@ -211,28 +206,19 @@ impl AnimationMethods for Animation {
             }
         }
     }
-    fn play_with_clock(
-        &self,
-        pos: Vec2,
-        clock: &mut f32,
-        params: Option<DrawTextureParams>,
-    ) -> bool {
+    fn play_with_clock(&self, pos: Vec2, clock: &mut f32, params: Option<DrawTextureParams>) {
         let wa = (*clock * 1000.0) as u32;
-        if wa < self.1 {
-            let mut frame = wa;
-            for i in self.0.iter() {
-                if frame > i.1 {
-                    frame -= i.1
-                } else {
-                    draw_texture_ex(&i.0, pos.x, pos.y, WHITE, params.unwrap_or_default());
 
-                    break;
-                }
+        let mut frame = wa;
+        for i in self.0.iter() {
+            if frame > i.1 {
+                frame -= i.1
+            } else {
+                draw_texture_ex(&i.0, pos.x, pos.y, WHITE, params.unwrap_or_default());
+
+                break;
             }
-            *clock += get_frame_time();
-            return true;
-        } else {
-            return false;
         }
+        *clock += get_frame_time();
     }
 }

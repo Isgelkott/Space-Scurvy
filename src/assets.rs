@@ -33,13 +33,19 @@ impl BotttomPlayerAnimations {
 pub struct JetpackerAnimation {
     pub idle: Animation,
     pub fly: Animation,
+    pub fall: Animation,
+    pub hit: Animation,
+    pub getup: Animation,
 }
 impl JetpackerAnimation {
     fn new() -> Self {
         let data = include_bytes!("../assets/jetpacker.aseprite");
         Self {
+            hit: load_animation_from_tag(data, "hit"),
+            fall: load_animation_from_tag(data, "fall"),
             idle: load_animation_from_tag(data, "idle"),
             fly: load_animation_from_tag(data, "fly"),
+            getup: load_animation_from_tag(data, "getup"),
         }
     }
 }

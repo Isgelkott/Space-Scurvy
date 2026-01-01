@@ -59,7 +59,7 @@ impl Game {
     }
 
     async fn update(&mut self) {
-        clear_background(SKYBLUE);
+        clear_background(BLACK);
 
         self.map.draw();
 
@@ -76,6 +76,7 @@ impl Game {
             &self.map,
             &mut self.projectiles,
             &mut self.particles,
+            &mut self.enemies,
         );
         update_particles(&mut self.particles);
         self.draw_camera();
