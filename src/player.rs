@@ -130,9 +130,10 @@ impl Player {
             } else {
                 current_top_animation.play_with_clock(
                     self.pos,
-                    animation_clock,
+                    *animation_clock,
                     Some(params.clone()),
                 );
+                *animation_clock += get_frame_time();
             }
         } else {
             top_animation.play(self.pos, Some(params.clone()));

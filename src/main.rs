@@ -20,6 +20,7 @@ struct Game {
     enemies: Vec<Box<dyn Enemy>>,
     projectiles: Vec<Box<dyn Projectile>>,
     particles: Vec<Box<dyn Particle>>,
+    map_animations: Vec<MapAnimation>,
 }
 impl Game {
     fn new() -> Self {
@@ -31,6 +32,7 @@ impl Game {
         Self {
             particles: Vec::new(),
             projectiles: Vec::new(),
+            map_animations: special_data.map_animations,
             enemies,
             map,
             player: Player::new(special_data.spawn_location),
@@ -62,6 +64,7 @@ impl Game {
         clear_background(BLACK);
 
         self.map.draw();
+        update_map_animations(&mut self.map_animations);
 
         self.camera.target = self.player.pos;
         self.player.update(&self.map, &mut self.projectiles);

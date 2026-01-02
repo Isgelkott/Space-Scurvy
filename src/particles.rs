@@ -43,7 +43,7 @@ impl Particle for StandardParticle {
             true
         } else {
             self.animation
-                .play_with_clock(self.pos - self.size / 2.0, &mut self.clock, None);
+                .play_with_clock(self.pos - self.size / 2.0, self.clock, None);
             false
         }
     }

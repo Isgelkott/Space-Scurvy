@@ -49,6 +49,11 @@ impl JetpackerAnimation {
         }
     }
 }
+pub struct LaughingManAnimations {
+    pub inactive: Animation,
+    pub active: Animation,
+    pub turn_off: Animation,
+}
 pub struct Assets {
     pub spritesheet: Spritesheet,
     pub top_player_animations: TopPlayerAnimations,
@@ -59,11 +64,19 @@ pub struct Assets {
     pub laser: Animation,
     pub machine_gunner: Animation,
     pub energy_ball_shatter: Animation,
+    pub laughing_man: (Animation, Animation, Animation),
 }
 
 impl Assets {
     fn new() -> Self {
+        let laughing_man = include_bytes!("../assets/talking_dude.aseprite");
         Self {
+            laughing_man: (
+                load_animation_from_tag(laughing_man, "off"),
+                load_animation_from_tag(laughing_man, "active"),
+                load_animation_from_tag(laughing_man, "turn_off"),
+            ),
+
             energy_ball_shatter: load_animation(include_bytes!(
                 "../assets/energy_ball_shatter.aseprite"
             )),

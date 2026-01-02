@@ -434,7 +434,7 @@ impl Enemy for Jetpacker {
             JetpackerState::Getup => {
                 ASSETS.jetpacker.getup.play_with_clock(
                     self.pos,
-                    &mut self.state.1,
+                    self.state.1,
                     Some(params.clone()),
                 );
                 if self.state.1 > ASSETS.jetpacker.getup.1 as f32 / 1000.0 {
@@ -442,11 +442,10 @@ impl Enemy for Jetpacker {
                 }
             }
             JetpackerState::Hit => {
-                ASSETS.jetpacker.hit.play_with_clock(
-                    self.pos,
-                    &mut self.state.1,
-                    Some(params.clone()),
-                );
+                ASSETS
+                    .jetpacker
+                    .hit
+                    .play_with_clock(self.pos, self.state.1, Some(params.clone()));
                 if self.state.1 > ASSETS.jetpacker.hit.1 as f32 / 1000.0 {
                     self.state = (JetpackerState::Fall, 0.0)
                 }

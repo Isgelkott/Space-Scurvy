@@ -1,6 +1,7 @@
 use crate::{
     assets::ASSETS,
     enemies::{ENEMY_IDS, Enemy, PresetEnemies},
+    utils::{Animation, AnimationMethods},
 };
 use macroquad::prelude::*;
 use std::{collections::HashMap, sync::LazyLock};
@@ -184,7 +185,24 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                     if id != 0 {
                         let id = id - 1;
                         match id {
+                            60..80 => {
+                                let map_animation = match id {
+                                    61 => (20.0, &ASSETS.laughing_man),
+                                    _ => unreachable!(),
+                                };
+                                special_data.map_animations.push(MapAnimation {
+                                    pos: world_pos,
+                                    clock: 0.0,
+                                    turn_off_value: 5.0,
+                                    turn_on_value: 20.0,
+                                    inactive: &map_animation.1.0,
+                                    active: &map_animation.1.1,
+                                    turn_off: &map_animation.1.2,
+                                });
+                            }
+
                             140..160 => {
+                                // enemies
                                 println!("found enemy, at {}", world_pos);
                                 let enemy = *ENEMY_IDS.get(&id).unwrap();
                                 special_data.enemies.push((enemy, world_pos));
@@ -211,11 +229,41 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
 pub enum Levels {
     TestLevel,
 }
-
+pub struct MapAnimation {
+    pos: Vec2,
+    clock: f32,
+    turn_off_value: f32,
+    turn_on_value: f32,
+    inactive: &'static Animation,
+    active: &'static Animation,
+    turn_off: &'static Animation,
+}
+impl MapAnimation {
+    fn update(&mut self) {
+        self.clock += get_frame_time();
+        if self.clock > self.turn_on_value {
+            self.clock = 0.0;
+            self.inactive.play(self.pos, None);
+        } else if self.clock > self.turn_off_value + self.turn_off.1 as f32 / 1000.0 {
+            self.inactive.play(self.pos, None);
+        } else if self.clock > self.turn_off_value {
+            self.turn_off
+                .play_with_clock(self.pos, self.clock - self.turn_off_value, None);
+        } else {
+            self.active.play(self.pos, None);
+        }
+    }
+}
+pub fn update_map_animations(animations: &mut Vec<MapAnimation>) {
+    for animation in animations.iter_mut() {
+        animation.update();
+    }
+}
 #[derive(Default)]
 pub struct SpecialData {
     pub spawn_location: Vec2,
     pub enemies: Vec<(PresetEnemies, Vec2)>,
+    pub map_animations: Vec<MapAnimation>,
 }
 pub struct Level {
     pub tiles: Vec<Tile>,
