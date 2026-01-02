@@ -49,11 +49,7 @@ impl JetpackerAnimation {
         }
     }
 }
-pub struct LaughingManAnimations {
-    pub inactive: Animation,
-    pub active: Animation,
-    pub turn_off: Animation,
-}
+
 pub struct Assets {
     pub spritesheet: Spritesheet,
     pub top_player_animations: TopPlayerAnimations,

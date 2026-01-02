@@ -1,12 +1,12 @@
-use std::{collections::HashMap, f32::consts::PI, sync::LazyLock};
+use std::{collections::HashMap, sync::LazyLock};
 
 use macroquad::prelude::*;
 
 use crate::{
-    assets::{ASSETS, Assets},
+    assets::ASSETS,
     enemies,
     level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE},
-    particles::{Particle, StandardParticle},
+    particles::Particle,
     player::{self, Player},
     utils::{Animation, AnimationMethods, BULLET_MATERIAL, check_collision},
 };
@@ -102,7 +102,7 @@ impl<'a> CollisionType<'a> {
 }
 pub trait Projectile {
     fn update(&mut self, player: &mut Player, map: &Level);
-    fn particle(&self) -> Option<Box<dyn Particle>> {
+    fn particle(&self) -> Option<Particle> {
         None
     }
     fn collision<'a>(
@@ -181,11 +181,15 @@ impl EnergyBall {
 }
 
 impl Projectile for EnergyBall {
-    fn particle(&self) -> Option<Box<dyn Particle>> {
-        Some(Box::new(StandardParticle::from_animation(
-            self.pos + self.size / 2.0,
-            &ASSETS.energy_ball_shatter,
-        )))
+    fn particle(&self) -> Option<Particle> {
+        Some(Particle::new(
+            Box::new(|f| {
+                &ASSETS.energy_ball_shatter.play(f, None);
+            }),
+            crate::particles::Lifetime::ByTime(ASSETS.energy_ball_shatter.1 as f32 / 1000.0),
+            None,
+            self.pos,
+        ))
     }
     fn collision<'a>(
         &self,
@@ -499,7 +503,10 @@ impl Enemy for Jetpacker {
                 }
             }
             JetpackerState::Lie => {
-                ASSETS.jetpacker.fall.play(self.pos, Some(params.clone()));
+                ASSETS
+                    .jetpacker
+                    .fall
+                    .play(self.pos + vec2(0.0, 4.0), Some(params.clone()));
                 if self.state.1 > ASSETS.jetpacker.fall.1 as f32 / 1000.0 {
                     self.state = (JetpackerState::Getup, 0.0)
                 }
@@ -524,7 +531,7 @@ pub fn update_projectiles(
     player: &mut Player,
     level: &Level,
     projectiles: &mut Vec<Box<dyn Projectile>>,
-    particles: &mut Vec<Box<dyn Particle>>,
+    particles: &mut Vec<Particle>,
     enemies: &mut Vec<Box<dyn Enemy>>,
 ) {
     projectiles.retain_mut(|f| {

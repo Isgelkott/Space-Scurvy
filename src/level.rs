@@ -27,8 +27,12 @@ impl Layer {
         }
     }
 }
+pub enum TileData {
+    SpritesheetCoord((u8, u8)),
+    Animation(&'static Animation),
+}
 pub struct Tile {
-    pub data: Vec<(Layer, (u8, u8))>,
+    pub data: Vec<(Layer, TileData)>,
 }
 
 pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialData) {
@@ -213,7 +217,10 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                             _ => {
                                 tile.data.push((
                                     Layer::from_str(*name),
-                                    (id % tile_set_width, id / tile_set_width),
+                                    TileData::SpritesheetCoord((
+                                        id % tile_set_width,
+                                        id / tile_set_width,
+                                    )),
                                 ));
                             }
                         }
@@ -286,22 +293,39 @@ impl Level {
     pub fn draw(&self) {
         for (index, tile) in self.tiles.iter().enumerate() {
             let index = index as u32;
-            for (layer, texture_coord) in tile.data.iter() {
+            for (layer, tile_data) in tile.data.iter() {
                 if *layer != Layer::Path {
-                    ASSETS.spritesheet.draw_from(
-                        *texture_coord,
-                        vec2(
-                            (index % self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
-                            (index / self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
-                        ),
-                        Some(DrawTextureParams {
-                            dest_size: Some(vec2(
-                                TILE_SIZE * MAP_SCALE_FACTOR,
-                                TILE_SIZE * MAP_SCALE_FACTOR,
-                            )),
-                            ..Default::default()
-                        }),
+                    let pos = vec2(
+                        (index % self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
+                        (index / self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
                     );
+                    match tile_data {
+                        TileData::Animation(animation) => {
+                            animation.play(
+                                pos,
+                                Some(DrawTextureParams {
+                                    dest_size: Some(vec2(
+                                        TILE_SIZE * MAP_SCALE_FACTOR,
+                                        TILE_SIZE * MAP_SCALE_FACTOR,
+                                    )),
+                                    ..Default::default()
+                                }),
+                            );
+                        }
+                        TileData::SpritesheetCoord(spritesheet_coords) => {
+                            ASSETS.spritesheet.draw_from(
+                                *spritesheet_coords,
+                                pos,
+                                Some(DrawTextureParams {
+                                    dest_size: Some(vec2(
+                                        TILE_SIZE * MAP_SCALE_FACTOR,
+                                        TILE_SIZE * MAP_SCALE_FACTOR,
+                                    )),
+                                    ..Default::default()
+                                }),
+                            );
+                        }
+                    }
                 }
             }
         }

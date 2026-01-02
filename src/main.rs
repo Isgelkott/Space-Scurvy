@@ -19,7 +19,7 @@ struct Game {
     camera: Camera2D,
     enemies: Vec<Box<dyn Enemy>>,
     projectiles: Vec<Box<dyn Projectile>>,
-    particles: Vec<Box<dyn Particle>>,
+    particles: Vec<Particle>,
     map_animations: Vec<MapAnimation>,
 }
 impl Game {

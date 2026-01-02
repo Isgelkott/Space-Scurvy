@@ -1,57 +1,53 @@
 use macroquad::{math::Vec2, prelude::animation, time::get_frame_time};
 
 use crate::utils::{Animation, AnimationMethods};
-pub trait Particle {
-    fn update(&mut self) -> bool;
+pub enum Lifetime {
+    ByDistance(f32),
+    ByTime(f32),
 }
-pub struct StandardParticle {
-    pos: Vec2,
+pub struct Particle {
+    draw: Box<dyn Fn(Vec2) -> ()>,
+    lifetime: Lifetime,
     clock: f32,
-    lifetime: f32,
-    animation: &'static Animation,
-    size: Vec2,
+    behavior: Option<Box<dyn Fn(f32) -> f32>>,
+    pos: Vec2,
 }
-impl StandardParticle {
-    pub fn from_animation(pos: Vec2, animation: &'static Animation) -> Self {
-        Self {
-            pos,
-            clock: 0.0,
-            lifetime: animation.1 as f32 / 1000.0,
-            animation,
-            size: animation.get_size(),
-        }
-    }
+impl Particle {
     pub fn new(
+        draw: Box<dyn Fn(Vec2)>,
+        lifetime: Lifetime,
+        behavior: Option<Box<dyn Fn(f32) -> f32>>,
         pos: Vec2,
-        clock: f32,
-        lifetime: f32,
-        animation: &'static Animation,
-        size: Vec2,
     ) -> Self {
         Self {
-            pos,
-            clock,
+            draw,
             lifetime,
-            animation,
-            size,
+            clock: 0.0,
+            behavior,
+            pos,
+        }
+    }
+    pub fn update(&mut self) {
+        self.clock += get_frame_time();
+        if let Some(behavior_fn) = &self.behavior {
+            self.pos.y = behavior_fn(self.clock);
+            self.pos.x = self.clock;
+        }
+        (self.draw)(self.pos);
+    }
+    pub fn should_die(&self) -> bool {
+        match self.lifetime {
+            Lifetime::ByDistance(distance) => {
+                let behaviour = self.behavior.as_ref().unwrap();
+                (behaviour(0.0) - (behaviour)(self.clock)).abs() > distance
+            }
+            Lifetime::ByTime(time) => self.clock > time,
         }
     }
 }
-impl Particle for StandardParticle {
-    fn update(&mut self) -> bool {
-        if self.clock >= self.lifetime {
-            true
-        } else {
-            self.clock += get_frame_time();
-            self.animation
-                .play_with_clock(self.pos - self.size / 2.0, self.clock, None);
-            false
-        }
-    }
-}
-pub fn update_particles(particles: &mut Vec<Box<dyn Particle>>) {
+pub fn update_particles(particles: &mut Vec<Particle>) {
     particles.retain_mut(|f| {
-        let is_dead = f.update();
-        !is_dead
+        f.update();
+        !f.should_die()
     });
 }
