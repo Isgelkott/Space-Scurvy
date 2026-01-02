@@ -92,9 +92,9 @@ impl Player {
                         Vec2::ZERO,
                     ),
                     bounds,
-                ) && self.pos.y + self.velocity.y + self.size.y > bounds.0.y
+                ) && self.pos.y + self.size.y < bounds.0.y
                 {
-                    self.velocity.y += -400.0;
+                    self.velocity.y = -200.0;
                     return false;
                 }
                 return true;
@@ -137,8 +137,9 @@ impl Player {
                 if self.pos.y == y0 && !clamped_x {
                     self.velocity.y = 0.0;
                     grounded = true;
-                } else if self.pos.y == y1 {
+                } else if self.pos.y == y1 && !clamped_x {
                     self.velocity.y = 0.0;
+                    println!("wa");
                 }
             }
         }
