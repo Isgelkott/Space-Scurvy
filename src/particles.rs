@@ -42,6 +42,7 @@ impl Particle for StandardParticle {
         if self.clock >= self.lifetime {
             true
         } else {
+            self.clock += get_frame_time();
             self.animation
                 .play_with_clock(self.pos - self.size / 2.0, self.clock, None);
             false

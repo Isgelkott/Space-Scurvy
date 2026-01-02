@@ -1,6 +1,6 @@
 use crate::{
     assets::ASSETS,
-    enemies::{Bullet, Projectile},
+    enemies::{self, Bullet, Enemy, Projectile, check_collision_with_size},
     level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE},
     utils::{Animation, *},
 };
@@ -17,7 +17,7 @@ pub struct Player {
     previous_flipped: bool,
 }
 const AIR_DRAG: f32 = 0.8;
-const GRAVITY: f32 = 3.5;
+const GRAVITY: f32 = 5.;
 impl Player {
     pub fn damage(&mut self, dmg: u32) {
         self.hp = self.hp.saturating_sub(dmg);
@@ -39,7 +39,12 @@ impl Player {
         }
     }
 
-    pub fn update(&mut self, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
+    pub fn update(
+        &mut self,
+        map: &Level,
+        projectiles: &mut Vec<Box<dyn Projectile>>,
+        enemies: &mut Vec<Box<dyn Enemy>>,
+    ) {
         let mut top_animation: &Animation = &ASSETS.top_player_animations.idle;
         let mut params = DrawTextureParams {
             flip_x: self.previous_flipped,
@@ -79,6 +84,22 @@ impl Player {
         self.velocity.y += GRAVITY;
         let mut grounded = false;
         for (index, point) in collision_points.iter().enumerate() {
+            enemies.retain(|f| {
+                let bounds = f.get_bounds();
+                if check_collision_with_size(
+                    (
+                        self.pos + vec2(point.0, point.1) + self.velocity * get_frame_time(),
+                        Vec2::ZERO,
+                    ),
+                    bounds,
+                ) && self.pos.y + self.velocity.y + self.size.y > bounds.0.y
+                {
+                    self.velocity.y += -400.0;
+                    return false;
+                }
+                return true;
+            });
+
             // SO JANK PLS FORGIVE
             let map_pos = (self.pos + self.velocity * get_frame_time() + vec2(point.0, point.1))
                 / (TILE_SIZE * MAP_SCALE_FACTOR);

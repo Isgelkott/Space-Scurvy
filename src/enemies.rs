@@ -52,7 +52,7 @@ fn check_map_collision(pos: Vec2, size: Vec2, map: &Level) -> bool {
     ];
     return points.iter().any(|f| check_collision(*f, map));
 }
-fn check_collision_with_size(obj1: (Vec2, Vec2), obj2: (Vec2, Vec2)) -> bool {
+pub fn check_collision_with_size(obj1: (Vec2, Vec2), obj2: (Vec2, Vec2)) -> bool {
     let points = [
         vec2(obj1.0.x, obj1.0.y),
         vec2(obj1.0.x + obj1.1.x, obj1.0.y),

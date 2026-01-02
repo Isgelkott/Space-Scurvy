@@ -67,7 +67,8 @@ impl Game {
         update_map_animations(&mut self.map_animations);
 
         self.camera.target = self.player.pos;
-        self.player.update(&self.map, &mut self.projectiles);
+        self.player
+            .update(&self.map, &mut self.projectiles, &mut self.enemies);
         update_enemies(
             &self.player,
             &mut self.enemies,
