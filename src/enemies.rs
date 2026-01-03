@@ -81,7 +81,6 @@ fn check_projectile_collision<'a>(
         for enemy in enemies {
             let bounds = enemy.get_bounds();
             if check_collision_with_size((pos, size), bounds) {
-                println!("wa");
                 return Some(CollisionType::Enemy(enemy));
             }
         }
@@ -182,7 +181,8 @@ impl EnergyBall {
 
 impl Projectile for EnergyBall {
     fn on_player_impact(&self, player: &mut Player) -> bool {
-        player.hp = player.hp.saturating_sub(25);
+        player.damage(25);
+        player.knockback(self.pos + self.size / 2.0, 900.0);
         return true;
     }
     fn particle(&self) -> Option<Particle> {
@@ -217,7 +217,7 @@ impl Projectile for EnergyBall {
         self.animation.play(self.pos, None);
         self.pos += self.velocity * get_frame_time();
         if check_player_collision(self.pos, self.size, player) {
-            player.hp = player.hp.saturating_sub(20);
+            player.damage(20);
         }
     }
 }
@@ -227,6 +227,7 @@ struct StandardProjectile {
     direction: Vec2,
     speed: f32,
     animation: &'static Animation,
+    damage: u32,
 }
 impl StandardProjectile {
     fn new(
@@ -235,10 +236,11 @@ impl StandardProjectile {
         direction: Vec2,
         speed: f32,
         animation: &'static Animation,
+        damage: u32,
     ) -> Self {
         Self {
             size,
-
+            damage,
             pos,
             direction,
             speed,
@@ -247,6 +249,10 @@ impl StandardProjectile {
     }
 }
 impl Projectile for StandardProjectile {
+    fn on_player_impact(&self, player: &mut Player) -> bool {
+        player.damage(self.damage);
+        return true;
+    }
     fn update(&mut self, _player: &mut Player, _map: &Level) {
         self.pos += self.direction.normalize_or_zero() * self.speed * get_frame_time();
         self.animation.play(
@@ -263,7 +269,13 @@ impl Projectile for StandardProjectile {
         player: &Player,
         enemies: &'a mut Vec<Box<dyn Enemy>>,
     ) -> Option<CollisionType<'a>> {
-        check_projectile_collision(self.pos, self.size, map, player, enemies)
+        let collision = check_projectile_collision(self.pos, self.size, map, player, enemies);
+        if let Some(collision) = &collision {
+            if let CollisionType::Enemy(enemy) = collision {
+                return None;
+            }
+        }
+        return collision;
     }
 }
 
@@ -276,13 +288,20 @@ pub trait Enemy {
     fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>);
     fn on_hit_by_player(&mut self) {}
 }
+
 struct MachineGunner {
     pos: Vec2,
-    clock: f32,
-    animation: &'static Animation,
+    shoot_clock: f32,
+    hit_clock: f32,
     size: Vec2,
+    flipped: bool,
+    hit: bool,
 }
 impl Enemy for MachineGunner {
+    fn on_hit_by_player(&mut self) {
+        self.hit = true;
+        self.hit_clock = 3.0;
+    }
     fn get_bounds(&self) -> (Vec2, Vec2) {
         (self.pos, self.size)
     }
@@ -291,43 +310,57 @@ impl Enemy for MachineGunner {
         Self: Sized,
     {
         Box::new(Self {
-            size: ASSETS.machine_gunner.get_size(),
+            flipped: false,
+            size: ASSETS.machine_gunner_shoot.get_size(),
             pos,
-            clock: 0.0,
-            animation: &ASSETS.machine_gunner,
+            shoot_clock: 0.0,
+            hit_clock: 0.0,
+            hit: false,
         })
     }
     fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
-        let flipped: bool = if player.pos.x > self.pos.x {
-            true
+        if !self.hit {
+            self.flipped = player.pos.x > self.pos.x;
+            if self.shoot_clock >= 0.4 {
+                projectiles.push(Box::new(StandardProjectile::new(
+                    self.pos
+                        + if self.flipped {
+                            vec2(-8.5 + self.size.x, 15.0)
+                        } else {
+                            vec2(-8.5, 15.0)
+                        },
+                    ASSETS.laser.get_size(),
+                    ((player.pos + player.size / 2.0) - (self.pos + self.size.y / 2.0))
+                        .normalize_or_zero(),
+                    40.0,
+                    &ASSETS.laser,
+                    2,
+                )));
+                self.shoot_clock = 0.0;
+            } else {
+                self.shoot_clock += get_frame_time();
+            }
+            ASSETS.machine_gunner_shoot.play(
+                self.pos,
+                Some(DrawTextureParams {
+                    flip_x: self.flipped,
+                    ..Default::default()
+                }),
+            );
         } else {
-            false
-        };
-        if self.clock >= 0.4 {
-            projectiles.push(Box::new(StandardProjectile::new(
-                self.pos
-                    + if flipped {
-                        vec2(-8.5 + self.size.x, 15.0)
-                    } else {
-                        vec2(-8.5, 15.0)
-                    },
-                ASSETS.laser.get_size(),
-                ((player.pos + player.size / 2.0) - (self.pos + self.size.y / 2.0))
-                    .normalize_or_zero(),
-                40.0,
-                &ASSETS.laser,
-            )));
-            self.clock = 0.0;
-        } else {
-            self.clock += get_frame_time();
+            ASSETS.machine_gunner_inactive.play(
+                self.pos,
+                Some(DrawTextureParams {
+                    flip_x: self.flipped,
+                    ..Default::default()
+                }),
+            );
+            self.hit_clock -= get_frame_time();
         }
-        self.animation.play(
-            self.pos,
-            Some(DrawTextureParams {
-                flip_x: flipped,
-                ..Default::default()
-            }),
-        );
+        if self.hit_clock < 0.0 {
+            self.hit = false;
+            self.hit_clock = 0.0;
+        }
     }
 }
 struct SpikeBall {
@@ -556,7 +589,6 @@ pub fn update_projectiles(
             } else {
                 if let CollisionType::Enemy(enemy) = collision {
                     enemy.on_hit_by_player();
-                    dbg!("wa");
                     return false;
                 }
             }

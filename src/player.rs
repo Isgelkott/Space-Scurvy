@@ -8,6 +8,7 @@ use macroquad::prelude::*;
 
 pub struct Player {
     pub hp: u32,
+    last_hp: u32,
     pub pos: Vec2,
     pub size: Vec2,
     velocity: Vec2,
@@ -15,15 +16,25 @@ pub struct Player {
     speed: f32,
     current_top_animation: Option<(&'static Animation, f32)>,
     previous_flipped: bool,
+    iframes: Option<f32>,
 }
-const AIR_DRAG: f32 = 0.8;
+const AIR_DRAG: f32 = 0.3;
+const FRICITON: f32 = 0.9;
 const GRAVITY: f32 = 5.;
 impl Player {
     pub fn damage(&mut self, dmg: u32) {
-        self.hp = self.hp.saturating_sub(dmg);
+        if self.iframes.is_none() {
+            self.iframes = Some(3.0);
+            self.hp = self.hp.saturating_sub(dmg);
+        }
+    }
+    pub fn knockback(&mut self, point: Vec2, strength: f32) {
+        self.velocity += strength * ((self.pos + self.size / 2.0) - point).normalize_or_zero()
     }
     pub fn new(pos: Vec2) -> Self {
         Self {
+            iframes: None,
+            last_hp: 100,
             hp: 100,
             previous_flipped: true,
             current_top_animation: None,
@@ -35,7 +46,7 @@ impl Player {
             pos,
 
             velocity: Vec2::ZERO,
-            speed: 100.0,
+            speed: 15.0,
         }
     }
 
@@ -45,6 +56,14 @@ impl Player {
         projectiles: &mut Vec<Box<dyn Projectile>>,
         enemies: &mut Vec<Box<dyn Enemy>>,
     ) {
+        if let Some(iframes) = &mut self.iframes {
+            if *iframes > 0.0 {
+                *iframes -= get_frame_time();
+            } else {
+                self.iframes = None;
+            }
+        }
+
         let mut top_animation: &Animation = &ASSETS.top_player_animations.idle;
         let mut params = DrawTextureParams {
             flip_x: self.previous_flipped,
@@ -52,25 +71,25 @@ impl Player {
             ..Default::default()
         };
         let mut bot_animation: &Animation = &ASSETS.bottom_player_animations.idle;
-        let mut direction = Vec2::ZERO;
+        let mut direction = 0.0;
         if is_key_down(KeyCode::A) {
             params.flip_x = true;
-            direction.x = -1.0;
+            direction = -1.0;
             bot_animation = &ASSETS.bottom_player_animations.walk;
         }
         if is_key_down(KeyCode::D) {
-            direction.x = 1.0;
+            direction = 1.0;
             params.flip_x = false;
             bot_animation = &ASSETS.bottom_player_animations.walk;
         }
 
         if self.grounded {
-            self.velocity = direction.normalize_or_zero() * self.speed;
+            self.velocity.x += direction * self.speed;
             if is_key_pressed(KeyCode::Space) {
                 self.velocity.y = -300.0;
             }
         } else {
-            self.velocity.x = direction.normalize_or_zero().x * self.speed * AIR_DRAG;
+            self.velocity.x = (self.velocity.x + direction * self.speed) * FRICITON;
         }
 
         let collision_points = [
@@ -82,20 +101,45 @@ impl Player {
             (self.size.x, self.size.y),
         ];
         self.velocity.y += GRAVITY;
-        let mut grounded = false;
+        self.grounded = false;
         for (index, point) in collision_points.iter().enumerate() {
             enemies.retain(|f| {
                 let bounds = f.get_bounds();
-                if check_collision_with_size(
+                let collision = check_collision_with_size(
                     (
                         self.pos + vec2(point.0, point.1) + self.velocity * get_frame_time(),
                         Vec2::ZERO,
                     ),
                     bounds,
-                ) && self.pos.y + self.size.y < bounds.0.y
-                {
-                    self.velocity.y = -200.0;
-                    return false;
+                );
+                if collision {
+                    if self.pos.y + self.size.y < bounds.0.y {
+                        self.velocity.y = -200.0;
+                        return false;
+                    } else {
+                        let clamped = self.pos.x
+                            != self
+                                .pos
+                                .x
+                                .clamp(bounds.0.x - point.0, bounds.0.x + bounds.1.x - point.0);
+                        if clamped {
+                            self.pos.x = self
+                                .pos
+                                .x
+                                .clamp(bounds.0.x - point.0, bounds.0.x + bounds.1.x - point.0);
+                            self.velocity.x = 200.0
+                                * if self.pos.x == bounds.0.x - point.0 {
+                                    dbg!("kj");
+
+                                    -1.0
+                                } else if self.pos.x == bounds.0.x + bounds.1.x - point.0 {
+                                    dbg!("wa");
+                                    1.0
+                                } else {
+                                    0.0
+                                };
+                        }
+                    }
                 }
                 return true;
             });
@@ -136,15 +180,21 @@ impl Player {
                 self.pos.y = self.pos.y.clamp(y0, y1);
                 if self.pos.y == y0 && !clamped_x {
                     self.velocity.y = 0.0;
-                    grounded = true;
+                    self.grounded = true;
                 } else if self.pos.y == y1 && !clamped_x {
                     self.velocity.y = 0.0;
                     println!("wa");
                 }
             }
         }
-        self.grounded = grounded;
+        if self.grounded {
+            self.velocity.x = self.velocity.x * FRICITON;
+        }
+        let shader = self.iframes.is_some() && (get_time() * 8.0).sin().is_sign_negative();
 
+        if shader {
+            gl_use_material(&IFRAMES_MATERIAL);
+        }
         if let Some((current_top_animation, animation_clock)) = &mut self.current_top_animation {
             if current_top_animation.1 as f32 / 1000.0 < *animation_clock {
                 self.current_top_animation = None;
@@ -180,5 +230,8 @@ impl Player {
             )));
         }
         self.previous_flipped = params.flip_x;
+        if shader {
+            gl_use_default_material();
+        }
     }
 }

@@ -86,7 +86,7 @@ impl ParticleGenerator {
         let rand_pos = gen_range(0.0, TILE_SIZE * MAP_SCALE_FACTOR);
         match self.particle_type {
             ParticleType::Acid => Particle::new(
-                Box::new(|f| draw_circle(f.x, f.y, 1.5, Color::from_hex(0x99e65f))),
+                Box::new(|f| draw_circle(f.x, f.y, 1.5, Color::from_hex(0x5ac54f))),
                 Lifetime::ByDistance(16.0),
                 Some(Box::new(|f| -5.0 * f.powi(2) + 5.0 * f)),
                 self.pos + vec2(rand_pos, 0.0),

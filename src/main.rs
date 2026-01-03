@@ -30,18 +30,16 @@ impl Game {
     fn draw_hud(&self) {
         set_default_camera();
         let hp = self.player.hp;
-        let hp = 75;
 
         for x in 0..5 {
             let x = x as f32;
-            let black_x = ((hp as f32 - (x) * 20.0) / 20.0);
-            dbg!(black_x);
+            let black_x = (hp as f32 - x * 20.0) / 20.0;
 
             HP_MATERIAL.set_uniform("black_x", black_x);
             gl_use_material(&HP_MATERIAL);
             draw_texture_ex(
                 &ASSETS.lemon,
-                (20.0 + x * (4.0 + ASSETS.lemon.width())) * self.scale_factor,
+                (7.0 + x * (4.0 + ASSETS.lemon.width())) * self.scale_factor,
                 10.0 * self.scale_factor,
                 WHITE,
                 DrawTextureParams {
@@ -98,6 +96,13 @@ impl Game {
         update_map_animations(&mut self.map_animations);
 
         self.camera.target = self.player.pos;
+        update_projectiles(
+            &mut self.player,
+            &self.map,
+            &mut self.projectiles,
+            &mut self.particles,
+            &mut self.enemies,
+        );
         self.player
             .update(&self.map, &mut self.projectiles, &mut self.enemies);
         update_enemies(
@@ -107,13 +112,7 @@ impl Game {
             &mut self.projectiles,
         );
         self.map.draw_foreground();
-        update_projectiles(
-            &mut self.player,
-            &self.map,
-            &mut self.projectiles,
-            &mut self.particles,
-            &mut self.enemies,
-        );
+
         update_particle_generators(&mut self.map.tiles, &mut self.particles);
         update_particles(&mut self.particles);
         self.draw_camera();

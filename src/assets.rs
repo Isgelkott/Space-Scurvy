@@ -58,16 +58,18 @@ pub struct Assets {
     pub energy_ball: Animation,
     pub spike_ball: Animation,
     pub laser: Animation,
-    pub machine_gunner: Animation,
+    pub machine_gunner_shoot: Animation,
     pub energy_ball_shatter: Animation,
     pub laughing_man: (Animation, Animation, Animation),
     pub acid: Animation,
     pub lemon: Texture2D,
+    pub machine_gunner_inactive: Animation,
 }
 
 impl Assets {
     fn new() -> Self {
         let laughing_man = include_bytes!("../assets/talking_dude.aseprite");
+        let machine_gunner = include_bytes!("../assets/machine_gunner.aseprite");
         Self {
             lemon: load_ase_texture(include_bytes!("../assets/lemon.aseprite"), None, None),
             acid: load_animation(include_bytes!("../assets/acid.aseprite")),
@@ -80,10 +82,11 @@ impl Assets {
             energy_ball_shatter: load_animation(include_bytes!(
                 "../assets/energy_ball_shatter.aseprite"
             )),
-            machine_gunner: load_animation_from_tag(
+            machine_gunner_shoot: load_animation_from_tag(
                 include_bytes!("../assets/machine_gunner.aseprite"),
                 "idle",
             ),
+            machine_gunner_inactive: load_animation_from_tag(machine_gunner, "inactive"),
             laser: load_animation_from_tag(include_bytes!("../assets/laser.aseprite"), "idle"),
             spike_ball: load_animation_from_tag(
                 include_bytes!("../assets/spikeball.aseprite"),

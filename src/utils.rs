@@ -186,6 +186,7 @@ void main() {
     uv = texcoord;
 }
 ";
+
 pub static HP_MATERIAL: LazyLock<Material> = std::sync::LazyLock::new(|| {
     let pipeline = PipelineParams {
         alpha_blend: Some(BlendState::new(
@@ -213,7 +214,43 @@ pub static HP_MATERIAL: LazyLock<Material> = std::sync::LazyLock::new(|| {
     )
     .unwrap()
 });
+const IFRAMES_SHADER: &'static str = "#version 100
+precision lowp float;
 
+varying vec2 uv;
+uniform sampler2D Texture;
+
+void main() {
+ 
+    gl_FragColor = texture2D(Texture, uv) + vec4(0.5,0.5,0.5,0.0);
+}
+";
+pub static IFRAMES_MATERIAL: LazyLock<Material> = LazyLock::new(|| {
+    let pipeline = PipelineParams {
+        alpha_blend: Some(BlendState::new(
+            Equation::Add,
+            BlendFactor::Value(BlendValue::SourceAlpha),
+            BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
+        )),
+        color_blend: Some(BlendState::new(
+            Equation::Add,
+            BlendFactor::Value(BlendValue::SourceAlpha),
+            BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
+        )),
+        ..Default::default()
+    };
+    load_material(
+        ShaderSource::Glsl {
+            vertex: DEFAULT_VERTEX_SHADER,
+            fragment: IFRAMES_SHADER,
+        },
+        MaterialParams {
+            pipeline_params: pipeline,
+            ..Default::default()
+        },
+    )
+    .unwrap()
+});
 const HP_SHADER: &'static str = "#version 100
 precision lowp float;
 
