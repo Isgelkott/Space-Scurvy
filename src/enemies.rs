@@ -181,6 +181,10 @@ impl EnergyBall {
 }
 
 impl Projectile for EnergyBall {
+    fn on_player_impact(&self, player: &mut Player) -> bool {
+        player.hp = player.hp.saturating_sub(25);
+        return true;
+    }
     fn particle(&self) -> Option<Particle> {
         Some(Particle::new(
             Box::new(|f| {
@@ -446,6 +450,11 @@ impl Enemy for Jetpacker {
                 }
             }
             JetpackerState::Hit => {
+                self.flipped = if player.pos.x > self.origin.x {
+                    true
+                } else {
+                    false
+                };
                 ASSETS
                     .jetpacker
                     .hit
@@ -510,7 +519,6 @@ impl Enemy for Jetpacker {
                 if self.state.1 > ASSETS.jetpacker.fall.1 as f32 / 1000.0 {
                     self.state = (JetpackerState::Getup, 0.0)
                 }
-                dbg!(&self.state);
             }
         }
 

@@ -186,6 +186,55 @@ void main() {
     uv = texcoord;
 }
 ";
+pub static HP_MATERIAL: LazyLock<Material> = std::sync::LazyLock::new(|| {
+    let pipeline = PipelineParams {
+        alpha_blend: Some(BlendState::new(
+            Equation::Add,
+            BlendFactor::Value(BlendValue::SourceAlpha),
+            BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
+        )),
+        color_blend: Some(BlendState::new(
+            Equation::Add,
+            BlendFactor::Value(BlendValue::SourceAlpha),
+            BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
+        )),
+        ..Default::default()
+    };
+    load_material(
+        ShaderSource::Glsl {
+            vertex: DEFAULT_VERTEX_SHADER,
+            fragment: HP_SHADER,
+        },
+        MaterialParams {
+            pipeline_params: pipeline,
+            uniforms: vec![UniformDesc::new("black_x", UniformType::Float1)],
+            ..Default::default()
+        },
+    )
+    .unwrap()
+});
+
+const HP_SHADER: &'static str = "#version 100
+precision lowp float;
+
+varying vec2 uv;
+uniform lowp float black_x; 
+uniform sampler2D Texture;
+
+void main() {
+ if (texture2D(Texture, uv).a != 0.0){
+ if (uv.x < black_x) {
+        gl_FragColor = texture2D(Texture, uv);
+    }  else{
+      gl_FragColor = vec4(0.0,0.0,0.0,1.0); 
+        
+    }
+    
+}else{
+gl_FragColor = vec4(0.0,0.0,0.0,0.0); 
+  
+}}
+";
 pub trait AnimationMethods {
     fn play(&self, pos: Vec2, params: Option<DrawTextureParams>);
     fn play_with_clock(&self, pos: Vec2, clock: f32, params: Option<DrawTextureParams>);

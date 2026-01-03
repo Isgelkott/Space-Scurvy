@@ -1,16 +1,18 @@
 use crate::{
     assets::ASSETS,
     enemies::{ENEMY_IDS, Enemy, PresetEnemies},
+    particles::ParticleGenerator,
     utils::{Animation, AnimationMethods},
 };
 use macroquad::prelude::*;
 use std::{collections::HashMap, sync::LazyLock};
 pub const TILE_SIZE: f32 = 16.0;
 pub const MAP_SCALE_FACTOR: f32 = 1.0;
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy)]
 pub enum Layer {
     Collision,
     Decor,
+    OverPlayer,
     Enemies,
     Special,
     Path,
@@ -20,6 +22,7 @@ impl Layer {
         match input {
             "collision" => Self::Collision,
             input if input.contains("decor") => Self::Decor,
+            "over_player" => Self::OverPlayer,
             "enemies" => Self::Enemies,
             "special" => Self::Special,
             "path" => Self::Path,
@@ -33,6 +36,7 @@ pub enum TileData {
 }
 pub struct Tile {
     pub data: Vec<(Layer, TileData)>,
+    pub particle_generator: Option<ParticleGenerator>,
 }
 
 pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialData) {
@@ -97,7 +101,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
 
         Some((lowest_x, lowest_y, highest_x, highest_y))
     }
-    let mut layers: Vec<(HashMap<(i32, i32), [u8; 256]>, &str)> = Vec::new();
+    let mut layers: Vec<(HashMap<(i32, i32), [u8; 256]>, Layer)> = Vec::new();
     for layer in tilemap.split("<layer").skip(1) {
         let name = layer
             .split_once("name=\"")
@@ -155,7 +159,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
 
             chunks.insert((x, y), data);
         }
-        layers.push((chunks, name));
+        layers.push((chunks, Layer::from_str(name)));
     }
     let layers_pos: Vec<(i32, i32, i32, i32)> = layers
         .iter()
@@ -178,8 +182,11 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
 
     for y in area.1..=area.3 {
         for x in area.0..=area.2 {
-            let mut tile = Tile { data: vec![] };
-            for (chunks, name) in layers.iter() {
+            let mut tile = Tile {
+                data: vec![],
+                particle_generator: None,
+            };
+            for (chunks, layer) in layers.iter() {
                 if let Some(chunk) = chunks.get(&(
                     ((x as f32 / TILE_SIZE).floor() * TILE_SIZE) as i32,
                     ((y as f32 / TILE_SIZE).floor() * TILE_SIZE) as i32,
@@ -211,12 +218,22 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                                 let enemy = *ENEMY_IDS.get(&id).unwrap();
                                 special_data.enemies.push((enemy, world_pos));
                             }
+                            160..180 => match id {
+                                160 => {
+                                    tile.particle_generator = Some(ParticleGenerator::new(
+                                        world_pos,
+                                        crate::particles::ParticleType::Acid,
+                                    ));
+                                    tile.data.push((*layer, TileData::Animation(&ASSETS.acid)));
+                                }
+                                _ => {}
+                            },
                             220 => {
                                 special_data.spawn_location = world_pos;
                             }
                             _ => {
                                 tile.data.push((
-                                    Layer::from_str(*name),
+                                    *layer,
                                     TileData::SpritesheetCoord((
                                         id % tile_set_width,
                                         id / tile_set_width,
@@ -290,42 +307,55 @@ impl Level {
             special_data,
         )
     }
-    pub fn draw(&self) {
+    fn draw(&self, tile_data: &TileData, index: u32) {
+        let pos = vec2(
+            (index % self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
+            (index / self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
+        );
+        match tile_data {
+            TileData::Animation(animation) => {
+                animation.play(
+                    pos,
+                    Some(DrawTextureParams {
+                        dest_size: Some(vec2(
+                            TILE_SIZE * MAP_SCALE_FACTOR,
+                            TILE_SIZE * MAP_SCALE_FACTOR,
+                        )),
+                        ..Default::default()
+                    }),
+                );
+            }
+            TileData::SpritesheetCoord(spritesheet_coords) => {
+                ASSETS.spritesheet.draw_from(
+                    *spritesheet_coords,
+                    pos,
+                    Some(DrawTextureParams {
+                        dest_size: Some(vec2(
+                            TILE_SIZE * MAP_SCALE_FACTOR,
+                            TILE_SIZE * MAP_SCALE_FACTOR,
+                        )),
+                        ..Default::default()
+                    }),
+                );
+            }
+        }
+    }
+    pub fn draw_background(&self) {
         for (index, tile) in self.tiles.iter().enumerate() {
             let index = index as u32;
             for (layer, tile_data) in tile.data.iter() {
-                if *layer != Layer::Path {
-                    let pos = vec2(
-                        (index % self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
-                        (index / self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
-                    );
-                    match tile_data {
-                        TileData::Animation(animation) => {
-                            animation.play(
-                                pos,
-                                Some(DrawTextureParams {
-                                    dest_size: Some(vec2(
-                                        TILE_SIZE * MAP_SCALE_FACTOR,
-                                        TILE_SIZE * MAP_SCALE_FACTOR,
-                                    )),
-                                    ..Default::default()
-                                }),
-                            );
-                        }
-                        TileData::SpritesheetCoord(spritesheet_coords) => {
-                            ASSETS.spritesheet.draw_from(
-                                *spritesheet_coords,
-                                pos,
-                                Some(DrawTextureParams {
-                                    dest_size: Some(vec2(
-                                        TILE_SIZE * MAP_SCALE_FACTOR,
-                                        TILE_SIZE * MAP_SCALE_FACTOR,
-                                    )),
-                                    ..Default::default()
-                                }),
-                            );
-                        }
-                    }
+                if *layer != Layer::Path && *layer != Layer::OverPlayer {
+                    self.draw(tile_data, index);
+                }
+            }
+        }
+    }
+    pub fn draw_foreground(&self) {
+        for (index, tile) in self.tiles.iter().enumerate() {
+            let index = index as u32;
+            for (layer, tile_data) in tile.data.iter() {
+                if *layer == Layer::OverPlayer {
+                    self.draw(tile_data, index);
                 }
             }
         }

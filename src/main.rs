@@ -4,7 +4,10 @@ use macroquad::prelude::*;
 use player::*;
 use utils::*;
 
-use crate::particles::{Particle, update_particles};
+use crate::{
+    assets::ASSETS,
+    particles::{Particle, update_particle_generators, update_particles},
+};
 mod assets;
 mod enemies;
 mod level;
@@ -14,6 +17,7 @@ mod utils;
 const SCREEN_SIZE: (f32, f32) = (200.0, 200.0);
 
 struct Game {
+    scale_factor: f32,
     map: Level,
     player: Player,
     camera: Camera2D,
@@ -23,6 +27,32 @@ struct Game {
     map_animations: Vec<MapAnimation>,
 }
 impl Game {
+    fn draw_hud(&self) {
+        set_default_camera();
+        let hp = self.player.hp;
+        let hp = 75;
+
+        for x in 0..5 {
+            let x = x as f32;
+            let black_x = ((hp as f32 - (x) * 20.0) / 20.0);
+            dbg!(black_x);
+
+            HP_MATERIAL.set_uniform("black_x", black_x);
+            gl_use_material(&HP_MATERIAL);
+            draw_texture_ex(
+                &ASSETS.lemon,
+                (20.0 + x * (4.0 + ASSETS.lemon.width())) * self.scale_factor,
+                10.0 * self.scale_factor,
+                WHITE,
+                DrawTextureParams {
+                    dest_size: Some(ASSETS.lemon.size() * self.scale_factor),
+                    ..Default::default()
+                },
+            );
+        }
+        gl_use_default_material();
+        set_camera(&self.camera);
+    }
     fn new() -> Self {
         let (map, special_data) = Level::new(Levels::TestLevel);
         let mut enemies = Vec::new();
@@ -30,6 +60,7 @@ impl Game {
             enemies.push(enemy.0.spawn(enemy.1, &map))
         }
         Self {
+            scale_factor: 1.0,
             particles: Vec::new(),
             projectiles: Vec::new(),
             map_animations: special_data.map_animations,
@@ -39,11 +70,11 @@ impl Game {
             camera: create_camera(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1)),
         }
     }
-    fn draw_camera(&self) {
+    fn draw_camera(&mut self) {
         set_default_camera();
         clear_background(BLACK);
 
-        let scale_factor = (screen_width() / SCREEN_SIZE.0).min(screen_height() / SCREEN_SIZE.1);
+        self.scale_factor = (screen_width() / SCREEN_SIZE.0).min(screen_height() / SCREEN_SIZE.1);
         draw_texture_ex(
             &self.camera.render_target.as_ref().unwrap().texture,
             0.0,
@@ -51,8 +82,8 @@ impl Game {
             WHITE,
             DrawTextureParams {
                 dest_size: Some(vec2(
-                    SCREEN_SIZE.0 * scale_factor,
-                    SCREEN_SIZE.1 * scale_factor,
+                    SCREEN_SIZE.0 * self.scale_factor,
+                    SCREEN_SIZE.1 * self.scale_factor,
                 )),
                 ..Default::default()
             },
@@ -63,7 +94,7 @@ impl Game {
     async fn update(&mut self) {
         clear_background(BLACK);
 
-        self.map.draw();
+        self.map.draw_background();
         update_map_animations(&mut self.map_animations);
 
         self.camera.target = self.player.pos;
@@ -75,6 +106,7 @@ impl Game {
             &self.map,
             &mut self.projectiles,
         );
+        self.map.draw_foreground();
         update_projectiles(
             &mut self.player,
             &self.map,
@@ -82,8 +114,10 @@ impl Game {
             &mut self.particles,
             &mut self.enemies,
         );
+        update_particle_generators(&mut self.map.tiles, &mut self.particles);
         update_particles(&mut self.particles);
         self.draw_camera();
+        self.draw_hud();
     }
 }
 

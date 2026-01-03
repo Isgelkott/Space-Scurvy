@@ -61,12 +61,16 @@ pub struct Assets {
     pub machine_gunner: Animation,
     pub energy_ball_shatter: Animation,
     pub laughing_man: (Animation, Animation, Animation),
+    pub acid: Animation,
+    pub lemon: Texture2D,
 }
 
 impl Assets {
     fn new() -> Self {
         let laughing_man = include_bytes!("../assets/talking_dude.aseprite");
         Self {
+            lemon: load_ase_texture(include_bytes!("../assets/lemon.aseprite"), None, None),
+            acid: load_animation(include_bytes!("../assets/acid.aseprite")),
             laughing_man: (
                 load_animation_from_tag(laughing_man, "off"),
                 load_animation_from_tag(laughing_man, "active"),
