@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::LazyLock};
 
+use image::imageops::rotate180;
 use macroquad::prelude::*;
 
 use crate::{
@@ -16,6 +17,7 @@ pub static ENEMY_IDS: LazyLock<HashMap<u8, PresetEnemies>> = LazyLock::new(|| {
         (141, PresetEnemies::SpikeBall),
         (142, PresetEnemies::MachineGunner),
         (143, PresetEnemies::FireWagon),
+        (161, PresetEnemies::BombChain),
     ])
 });
 #[derive(Clone, Copy)]
@@ -24,6 +26,7 @@ pub enum PresetEnemies {
     SpikeBall,
     MachineGunner,
     FireWagon,
+    BombChain,
 }
 impl PresetEnemies {
     pub fn spawn(&self, pos: Vec2, map: &Level) -> Box<dyn Enemy> {
@@ -32,6 +35,7 @@ impl PresetEnemies {
             Self::SpikeBall => SpikeBall::spawn(pos, map),
             Self::MachineGunner => MachineGunner::spawn(pos, map),
             Self::FireWagon => FireWagon::spawn(pos, map),
+            Self::BombChain => BombChain::spawn(pos + TILE_SIZE / 2.0, map),
         }
     }
 }
@@ -283,6 +287,12 @@ impl Projectile for StandardProjectile {
 }
 
 pub trait Enemy {
+    fn on_jumped_on_by_player(&self) -> bool {
+        return true;
+    }
+    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> (Option<f32>, Option<u32>) {
+        (Some(200.0), Some(10))
+    }
     fn get_bounds(&self) -> (Vec2, Vec2);
     fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
     where
@@ -332,15 +342,86 @@ impl Enemy for FireWagon {
             flip_x: self.direction.x.is_sign_negative(),
             ..Default::default()
         });
-        if player.pos.x > self.pos.x + self.speed * self.direction.x.signum() {
+        if (player.pos.x + player.size.x / 2.0)
+            < (self.pos.x + self.size.x / 2.0) + 100.0 * self.direction.x.signum()
+        {
             ASSETS.fire_wagon_fire.play(self.pos, params.clone());
             self.size = ASSETS.fire_wagon_fire.get_size();
         } else {
             ASSETS.fire_wagon_jiggle.play(self.pos, params.clone());
-            self.size = vec2(11.0, 16.0)
+            self.size = vec2(11.0, 15.0)
         }
         ASSETS.fire_wagon_wheel.play(self.pos, params);
         self.pos += self.direction * self.speed * get_frame_time();
+    }
+}
+struct BombChain {
+    origin: Vec2,
+    bomb_pos: Vec2,
+    rotation: f32,
+    chain: &'static Texture2D,
+    has_bomb: bool,
+    bomb: &'static Texture2D,
+}
+impl Enemy for BombChain {
+    fn get_bounds(&self) -> (Vec2, Vec2) {
+        (self.bomb_pos, self.bomb.size())
+    }
+    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> (Option<f32>, Option<u32>) {
+        if self.has_bomb {
+            self.has_bomb = false;
+            particles.push(Particle::new(
+                Box::new(|f| ASSETS.bomb_explode.play(f, None)),
+                crate::particles::Lifetime::ByTime(ASSETS.bomb_explode.get_duration()),
+                None,
+                self.bomb_pos + self.bomb.size() / 2.0 - ASSETS.bomb_explode.get_size() / 2.0,
+            ));
+            (Some(800.), Some(40))
+        } else {
+            (None, None)
+        }
+    }
+    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
+    where
+        Self: Sized,
+    {
+        Box::new(Self {
+            bomb_pos: Vec2::ZERO,
+            bomb: &ASSETS.bomb,
+            chain: &ASSETS.bomb_chain,
+            origin: pos,
+            has_bomb: true,
+            rotation: 0.0,
+        })
+    }
+
+    fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
+        self.rotation += 5.0 * get_frame_time();
+        self.bomb_pos = self.origin
+            + self.chain.width() * vec2((self.rotation).cos(), (self.rotation).sin())
+            - self.bomb.size() / 2.0;
+        draw_texture_ex(
+            self.chain,
+            self.origin.x,
+            self.origin.y,
+            BLACK,
+            DrawTextureParams {
+                rotation: self.rotation,
+                pivot: Some(self.origin),
+                ..Default::default()
+            },
+        );
+        if self.has_bomb {
+            draw_texture_ex(
+                self.bomb,
+                self.bomb_pos.x,
+                self.bomb_pos.y,
+                BLACK,
+                DrawTextureParams {
+                    ..Default::default()
+                },
+            );
+        }
     }
 }
 struct MachineGunner {

@@ -2,6 +2,7 @@ use crate::{
     assets::ASSETS,
     enemies::{self, Bullet, Enemy, Projectile, check_collision_with_size},
     level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE},
+    particles::Particle,
     utils::{Animation, *},
 };
 use macroquad::prelude::*;
@@ -55,6 +56,7 @@ impl Player {
         map: &Level,
         projectiles: &mut Vec<Box<dyn Projectile>>,
         enemies: &mut Vec<Box<dyn Enemy>>,
+        particles: &mut Vec<Particle>,
     ) {
         if let Some(iframes) = &mut self.iframes {
             if *iframes > 0.0 {
@@ -103,7 +105,7 @@ impl Player {
         self.velocity.y += GRAVITY;
         self.grounded = false;
         for (index, point) in collision_points.iter().enumerate() {
-            enemies.retain(|f| {
+            enemies.retain_mut(|f| {
                 let bounds = f.get_bounds();
                 let collision = check_collision_with_size(
                     (
@@ -113,33 +115,38 @@ impl Player {
                     bounds,
                 );
                 if collision {
-                    if self.pos.y + self.size.y < bounds.0.y {
+                    if self.pos.y + self.size.y < bounds.0.y && f.on_jumped_on_by_player() {
                         self.velocity.y = -200.0;
                         return false;
                     } else {
-                        let clamped = self.pos.x
-                            != self
-                                .pos
-                                .x
-                                .clamp(bounds.0.x - point.0, bounds.0.x + bounds.1.x - point.0);
-                        if clamped {
-                            self.pos.x = self
-                                .pos
-                                .x
-                                .clamp(bounds.0.x - point.0, bounds.0.x + bounds.1.x - point.0);
-                            self.velocity.x = 200.0
-                                * if self.pos.x == bounds.0.x - point.0 {
-                                    dbg!("kj");
-
-                                    -1.0
-                                } else if self.pos.x == bounds.0.x + bounds.1.x - point.0 {
-                                    dbg!("wa");
-                                    1.0
-                                } else {
-                                    0.0
-                                };
+                        let enemy_contact_effect = f.on_player_contact(particles);
+                        if let Some(knockback) = enemy_contact_effect.0 {
+                            self.knockback(bounds.0 + bounds.1 / 2.0, knockback);
+                        }
+                        if let Some(damage) = enemy_contact_effect.1 {
+                            self.damage(damage);
                         }
                     }
+                    //  else {
+                    //     let clamped = self.pos.x
+                    //         != self
+                    //             .pos
+                    //             .x
+                    //             .clamp(bounds.0.x - point.0, bounds.0.x + bounds.1.x - point.0);
+                    //     if clamped {
+                    //         self.pos.x = self
+                    //             .pos
+                    //             .x
+                    //             .clamp(bounds.0.x - point.0, bounds.0.x + bounds.1.x - point.0);
+                    //         self.velocity.x = 200.0
+                    //             * if self.pos.x == bounds.0.x - point.0 {
+                    //                 -1.0
+                    //             } else if self.pos.x == bounds.0.x + bounds.1.x - point.0 {
+                    //                 1.0
+                    //             } else {
+                    //                 0.0
+                    //             };
+                    //     }
                 }
                 return true;
             });

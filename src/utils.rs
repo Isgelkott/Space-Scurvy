@@ -275,9 +275,14 @@ gl_FragColor = vec4(0.0,0.0,0.0,0.0);
 pub trait AnimationMethods {
     fn play(&self, pos: Vec2, params: Option<DrawTextureParams>);
     fn play_with_clock(&self, pos: Vec2, clock: f32, params: Option<DrawTextureParams>);
+    fn play_with_time(&self, pos: Vec2, time: f64, params: Option<DrawTextureParams>);
     fn get_size(&self) -> Vec2;
+    fn get_duration(&self) -> f32;
 }
 impl AnimationMethods for Animation {
+    fn get_duration(&self) -> f32 {
+        self.1 as f32 / 1000.0
+    }
     fn get_size(&self) -> Vec2 {
         vec2(self.0[0].0.width(), self.0[0].0.height())
     }
@@ -293,9 +298,19 @@ impl AnimationMethods for Animation {
         }
     }
     fn play_with_clock(&self, pos: Vec2, clock: f32, params: Option<DrawTextureParams>) {
-        let wa = (clock * 1000.0) as u32;
+        let mut frame = (clock * 1000.0) as u32;
+        for i in self.0.iter() {
+            if frame > i.1 {
+                frame -= i.1
+            } else {
+                draw_texture_ex(&i.0, pos.x, pos.y, WHITE, params.unwrap_or_default());
 
-        let mut frame = wa;
+                break;
+            }
+        }
+    }
+    fn play_with_time(&self, pos: Vec2, time: f64, params: Option<DrawTextureParams>) {
+        let mut frame = ((get_time() - time) * 1000.0) as u32;
         for i in self.0.iter() {
             if frame > i.1 {
                 frame -= i.1

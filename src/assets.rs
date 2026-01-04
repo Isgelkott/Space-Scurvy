@@ -67,6 +67,10 @@ pub struct Assets {
     pub fire_wagon_wheel: Animation,
     pub fire_wagon_jiggle: Animation,
     pub fire_wagon_fire: Animation,
+    pub blood: Animation,
+    pub bomb_chain: Texture2D,
+    pub bomb: Texture2D,
+    pub bomb_explode: Animation,
 }
 
 impl Assets {
@@ -75,6 +79,14 @@ impl Assets {
         let machine_gunner = include_bytes!("../assets/machine_gunner.aseprite");
         let fire_wagon = include_bytes!("../assets/fire_wagon.aseprite");
         Self {
+            bomb_explode: load_animation(include_bytes!("../assets/bomb_explode.aseprite")),
+            bomb_chain: load_ase_texture(
+                include_bytes!("../assets/bomb_chain.aseprite"),
+                None,
+                None,
+            ),
+            bomb: load_ase_texture(include_bytes!("../assets/bomb.aseprite"), None, None),
+            blood: load_animation(include_bytes!("../assets/blood.aseprite")),
             fire_wagon_fire: load_animation_from_tag(fire_wagon, "fire"),
             fire_wagon_jiggle: load_animation_from_tag(fire_wagon, "jiggle"),
             fire_wagon_wheel: load_animation_from_tag(fire_wagon, "drive"),

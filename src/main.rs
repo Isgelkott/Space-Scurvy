@@ -103,8 +103,12 @@ impl Game {
             &mut self.particles,
             &mut self.enemies,
         );
-        self.player
-            .update(&self.map, &mut self.projectiles, &mut self.enemies);
+        self.player.update(
+            &self.map,
+            &mut self.projectiles,
+            &mut self.enemies,
+            &mut self.particles,
+        );
         update_enemies(
             &self.player,
             &mut self.enemies,

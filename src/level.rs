@@ -187,14 +187,11 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                 particle_generator: None,
             };
             for (chunks, layer) in layers.iter() {
-                if let Some(chunk) = chunks.get(&(
-                    ((x as f32 / TILE_SIZE).floor() * TILE_SIZE) as i32,
-                    ((y as f32 / TILE_SIZE).floor() * TILE_SIZE) as i32,
-                )) {
+                if let Some(chunk) = chunks.get(&((x / 16 * 16), ((y / 16) * 16))) {
                     let id = chunk[(y % 16 * 16 + x % 16).max(0) as usize];
-                    let world_pos = vec2(x as f32, y as f32) * MAP_SCALE_FACTOR * TILE_SIZE;
+                    let world_pos = vec2(x as f32, y as f32 - 8.0) * TILE_SIZE;
+
                     if id != 0 {
-                        let id = id - 1;
                         match id {
                             60..80 => {
                                 let map_animation = match id {
@@ -211,27 +208,42 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                                     turn_off: &map_animation.1.2,
                                 });
                             }
-
-                            140..160 => {
-                                // enemies
-                                println!("found enemy, at {}", world_pos);
-                                let enemy = *ENEMY_IDS.get(&id).unwrap();
-                                special_data.enemies.push((enemy, world_pos));
-                            }
-                            160..180 => match id {
-                                160 => {
+                            80..100 => match id {
+                                80 => {
                                     tile.particle_generator = Some(ParticleGenerator::new(
                                         world_pos,
                                         crate::particles::ParticleType::Acid,
                                     ));
                                     tile.data.push((*layer, TileData::Animation(&ASSETS.acid)));
                                 }
-                                _ => {}
+                                _ => panic!(),
                             },
-                            220 => {
+                            140..160 => {
+                                // enemies
+                                println!("found enemy, at {} with id {}", world_pos, id);
+                                let enemy = *ENEMY_IDS.get(&id).unwrap();
+                                special_data.enemies.push((enemy, world_pos));
+                                let id = id - 1;
+                                tile.data.push((
+                                    *layer,
+                                    TileData::SpritesheetCoord((
+                                        id % tile_set_width,
+                                        id / tile_set_width,
+                                    )),
+                                ));
+                            }
+                            160..180 => {
+                                // enemies with tiles
+
+                                println!("found enemy, at {}", world_pos);
+                                let enemy = *ENEMY_IDS.get(&id).unwrap();
+                                special_data.enemies.push((enemy, world_pos));
+                            }
+                            221 => {
                                 special_data.spawn_location = world_pos;
                             }
                             _ => {
+                                let id = id - 1;
                                 tile.data.push((
                                     *layer,
                                     TileData::SpritesheetCoord((
