@@ -15,6 +15,7 @@ pub static ENEMY_IDS: LazyLock<HashMap<u8, PresetEnemies>> = LazyLock::new(|| {
         (140, PresetEnemies::Jetpacker),
         (141, PresetEnemies::SpikeBall),
         (142, PresetEnemies::MachineGunner),
+        (143, PresetEnemies::FireWagon),
     ])
 });
 #[derive(Clone, Copy)]
@@ -22,6 +23,7 @@ pub enum PresetEnemies {
     Jetpacker,
     SpikeBall,
     MachineGunner,
+    FireWagon,
 }
 impl PresetEnemies {
     pub fn spawn(&self, pos: Vec2, map: &Level) -> Box<dyn Enemy> {
@@ -29,6 +31,7 @@ impl PresetEnemies {
             Self::Jetpacker => Jetpacker::spawn(pos, map),
             Self::SpikeBall => SpikeBall::spawn(pos, map),
             Self::MachineGunner => MachineGunner::spawn(pos, map),
+            Self::FireWagon => FireWagon::spawn(pos, map),
         }
     }
 }
@@ -288,7 +291,58 @@ pub trait Enemy {
     fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>);
     fn on_hit_by_player(&mut self) {}
 }
-
+struct FireWagon {
+    pos: Vec2,
+    size: Vec2,
+    direction: Vec2,
+    speed: f32,
+}
+impl Enemy for FireWagon {
+    fn get_bounds(&self) -> (Vec2, Vec2) {
+        (self.pos, self.size)
+    }
+    fn on_hit_by_player(&mut self) {}
+    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
+    where
+        Self: Sized,
+    {
+        Box::new(Self {
+            pos,
+            size: Vec2::ZERO,
+            direction: vec2(1.0, 0.0),
+            speed: 100.0,
+        })
+    }
+    fn update(
+        &mut self,
+        player: &Player,
+        map: &Level,
+        _projectiles: &mut Vec<Box<dyn Projectile>>,
+    ) {
+        for i in 0..2 {
+            let i = i as f32 * 16.0;
+            if check_collision(
+                self.pos + vec2(i, 0.0) + self.direction * self.speed * get_frame_time(),
+                map,
+            ) {
+                self.direction.x *= -1.0;
+            }
+        }
+        let params = Some(DrawTextureParams {
+            flip_x: self.direction.x.is_sign_negative(),
+            ..Default::default()
+        });
+        if player.pos.x > self.pos.x + self.speed * self.direction.x.signum() {
+            ASSETS.fire_wagon_fire.play(self.pos, params.clone());
+            self.size = ASSETS.fire_wagon_fire.get_size();
+        } else {
+            ASSETS.fire_wagon_jiggle.play(self.pos, params.clone());
+            self.size = vec2(11.0, 16.0)
+        }
+        ASSETS.fire_wagon_wheel.play(self.pos, params);
+        self.pos += self.direction * self.speed * get_frame_time();
+    }
+}
 struct MachineGunner {
     pos: Vec2,
     shoot_clock: f32,
