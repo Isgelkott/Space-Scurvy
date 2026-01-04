@@ -189,7 +189,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
             for (chunks, layer) in layers.iter() {
                 if let Some(chunk) = chunks.get(&((x / 16 * 16), ((y / 16) * 16))) {
                     let id = chunk[(y % 16 * 16 + x % 16).max(0) as usize];
-                    let world_pos = vec2(x as f32, y as f32 - 8.0) * TILE_SIZE;
+                    let world_pos = vec2(x as f32, (y - y % 16) as f32) * TILE_SIZE;
 
                     if id != 0 {
                         match id {
