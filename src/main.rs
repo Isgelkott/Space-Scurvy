@@ -6,19 +6,23 @@ use utils::*;
 
 use crate::{
     assets::ASSETS,
+    background::Background,
     particles::{Particle, update_particle_generators, update_particles},
 };
 mod assets;
+mod background;
 mod enemies;
 mod level;
 mod particles;
 mod player;
 mod utils;
+
 const SCREEN_SIZE: (f32, f32) = (200.0, 200.0);
 
 struct Game {
     scale_factor: f32,
     map: Level,
+    backgrounds: Background,
     player: Player,
     camera: Camera2D,
     enemies: Vec<Box<dyn Enemy>>,
@@ -58,6 +62,7 @@ impl Game {
             enemies.push(enemy.0.spawn(enemy.1, &map))
         }
         Self {
+            backgrounds: Background::new(map.world_size),
             scale_factor: 1.0,
             particles: Vec::new(),
             projectiles: Vec::new(),
@@ -91,7 +96,7 @@ impl Game {
 
     async fn update(&mut self) {
         clear_background(BLACK);
-
+        self.backgrounds.update();
         self.map.draw_background();
         update_map_animations(&mut self.map_animations);
 

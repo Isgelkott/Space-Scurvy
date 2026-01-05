@@ -306,6 +306,7 @@ pub struct SpecialData {
 pub struct Level {
     pub tiles: Vec<Tile>,
     pub width: u32,
+    pub world_size: Vec2,
 }
 impl Level {
     pub fn new(level: Levels) -> (Self, SpecialData) {
@@ -313,28 +314,27 @@ impl Level {
             Levels::TestLevel => include_str!("../assets/testlvl.tmx"),
         };
         let (map, special_data) = load_tilemap(data, include_str!("../assets/tileset.tsx"));
+        let height = map.0.len() as f32 / map.1 as f32;
         (
             Self {
                 tiles: map.0,
                 width: map.1,
+                world_size: vec2(map.1 as f32 * TILE_SIZE, height * TILE_SIZE),
             },
             special_data,
         )
     }
     fn draw(&self, tile_data: &TileData, index: u32) {
         let pos = vec2(
-            (index % self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
-            (index / self.width) as f32 * TILE_SIZE * MAP_SCALE_FACTOR,
+            (index % self.width) as f32 * TILE_SIZE,
+            (index / self.width) as f32 * TILE_SIZE,
         );
         match tile_data {
             TileData::Animation(animation) => {
                 animation.play(
                     pos,
                     Some(DrawTextureParams {
-                        dest_size: Some(vec2(
-                            TILE_SIZE * MAP_SCALE_FACTOR,
-                            TILE_SIZE * MAP_SCALE_FACTOR,
-                        )),
+                        dest_size: Some(vec2(TILE_SIZE, TILE_SIZE)),
                         ..Default::default()
                     }),
                 );
@@ -344,10 +344,7 @@ impl Level {
                     *spritesheet_coords,
                     pos,
                     Some(DrawTextureParams {
-                        dest_size: Some(vec2(
-                            TILE_SIZE * MAP_SCALE_FACTOR,
-                            TILE_SIZE * MAP_SCALE_FACTOR,
-                        )),
+                        dest_size: Some(vec2(TILE_SIZE, TILE_SIZE)),
                         ..Default::default()
                     }),
                 );

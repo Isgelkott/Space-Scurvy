@@ -49,7 +49,10 @@ impl JetpackerAnimation {
         }
     }
 }
-
+pub enum DisplayType {
+    Texture(Texture2D),
+    Animation(Animation),
+}
 pub struct Assets {
     pub spritesheet: Spritesheet,
     pub top_player_animations: TopPlayerAnimations,
@@ -71,6 +74,8 @@ pub struct Assets {
     pub bomb_chain: Texture2D,
     pub bomb: Texture2D,
     pub bomb_explode: Animation,
+    pub background_objects: Vec<DisplayType>,
+    pub spaceship: Animation,
 }
 
 impl Assets {
@@ -79,6 +84,20 @@ impl Assets {
         let machine_gunner = include_bytes!("../assets/machine_gunner.aseprite");
         let fire_wagon = include_bytes!("../assets/fire_wagon.aseprite");
         Self {
+            spaceship: load_animation(include_bytes!("../assets/spaceship.aseprite")),
+            background_objects: vec![
+                DisplayType::Animation(load_animation(include_bytes!("../assets/earth.aseprite"))),
+                DisplayType::Texture(load_ase_texture(
+                    include_bytes!("../assets/abandonded.aseprite"),
+                    None,
+                    None,
+                )),
+                DisplayType::Texture(load_ase_texture(
+                    include_bytes!("../assets/planet1.aseprite"),
+                    None,
+                    None,
+                )),
+            ],
             bomb_explode: load_animation(include_bytes!("../assets/bomb_explode.aseprite")),
             bomb_chain: load_ase_texture(
                 include_bytes!("../assets/bomb_chain.aseprite"),
