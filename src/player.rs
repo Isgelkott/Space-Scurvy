@@ -20,7 +20,7 @@ pub struct Player {
     iframes: Option<f32>,
 }
 const AIR_DRAG: f32 = 0.3;
-const FRICITON: f32 = 0.9;
+const FRICITON: f32 = 0.93;
 const GRAVITY: f32 = 5.;
 impl Player {
     pub fn damage(&mut self, dmg: u32) {
@@ -30,7 +30,9 @@ impl Player {
         }
     }
     pub fn knockback(&mut self, point: Vec2, strength: f32) {
-        self.velocity += strength * ((self.pos + self.size / 2.0) - point).normalize_or_zero()
+        if self.iframes.is_none() {
+            self.velocity += strength * ((self.pos + self.size / 2.0) - point).normalize_or_zero()
+        }
     }
     pub fn new(pos: Vec2) -> Self {
         Self {
@@ -47,7 +49,7 @@ impl Player {
             pos,
 
             velocity: Vec2::ZERO,
-            speed: 15.0,
+            speed: 10.0,
         }
     }
 
@@ -119,11 +121,10 @@ impl Player {
                         self.velocity.y = -200.0;
                         return false;
                     } else {
-                        let enemy_contact_effect = f.on_player_contact(particles);
-                        if let Some(knockback) = enemy_contact_effect.0 {
-                            self.knockback(bounds.0 + bounds.1 / 2.0, knockback);
-                        }
-                        if let Some(damage) = enemy_contact_effect.1 {
+                        if let Some((knockback_origin, knockback_strenght, damage)) =
+                            f.on_player_contact(particles)
+                        {
+                            self.knockback(knockback_origin, knockback_strenght);
                             self.damage(damage);
                         }
                     }
@@ -190,7 +191,6 @@ impl Player {
                     self.grounded = true;
                 } else if self.pos.y == y1 && !clamped_x {
                     self.velocity.y = 0.0;
-                    println!("wa");
                 }
             }
         }

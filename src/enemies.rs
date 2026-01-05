@@ -290,8 +290,9 @@ pub trait Enemy {
     fn on_jumped_on_by_player(&self) -> bool {
         return true;
     }
-    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> (Option<f32>, Option<u32>) {
-        (Some(200.0), Some(10))
+    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> Option<(Vec2, f32, u32)> {
+        let bounds = self.get_bounds();
+        Some((self.get_bounds().0 + self.get_bounds().1 / 2.0, 200.0, 10))
     }
     fn get_bounds(&self) -> (Vec2, Vec2);
     fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
@@ -310,6 +311,11 @@ struct FireWagon {
 impl Enemy for FireWagon {
     fn get_bounds(&self) -> (Vec2, Vec2) {
         (self.pos, self.size)
+    }
+
+    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> Option<(Vec2, f32, u32)> {
+        let bounds = self.get_bounds();
+        Some((bounds.0 + bounds.1 / 2.0, 850.0, 20))
     }
     fn on_hit_by_player(&mut self) {}
     fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
@@ -342,9 +348,8 @@ impl Enemy for FireWagon {
             flip_x: self.direction.x.is_sign_negative(),
             ..Default::default()
         });
-        if (player.pos.x + player.size.x / 2.0)
-            < (self.pos.x + self.size.x / 2.0) + 100.0 * self.direction.x.signum()
-        {
+        let diff = (player.pos.x + player.size.x / 2.0) - (self.pos.x + self.size.x / 2.0);
+        if diff.signum() == self.direction.x.signum() && diff.abs() < 35.0 {
             ASSETS.fire_wagon_fire.play(self.pos, params.clone());
             self.size = ASSETS.fire_wagon_fire.get_size();
         } else {
@@ -367,7 +372,10 @@ impl Enemy for BombChain {
     fn get_bounds(&self) -> (Vec2, Vec2) {
         (self.bomb_pos, self.bomb.size())
     }
-    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> (Option<f32>, Option<u32>) {
+    fn on_jumped_on_by_player(&self) -> bool {
+        return false;
+    }
+    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> Option<(Vec2, f32, u32)> {
         if self.has_bomb {
             self.has_bomb = false;
             particles.push(Particle::new(
@@ -376,9 +384,10 @@ impl Enemy for BombChain {
                 None,
                 self.bomb_pos + self.bomb.size() / 2.0 - ASSETS.bomb_explode.get_size() / 2.0,
             ));
-            (Some(800.), Some(40))
+            let bounds = self.get_bounds();
+            Some((bounds.0 + bounds.1 / 2.0, 600., 40))
         } else {
-            (None, None)
+            None
         }
     }
     fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
@@ -389,7 +398,7 @@ impl Enemy for BombChain {
             bomb_pos: Vec2::ZERO,
             bomb: &ASSETS.bomb,
             chain: &ASSETS.bomb_chain,
-            origin: pos + vec2(0.0, 32.0),
+            origin: pos,
             has_bomb: true,
             rotation: 0.0,
         })
@@ -408,7 +417,7 @@ impl Enemy for BombChain {
             WHITE,
             DrawTextureParams {
                 rotation: self.rotation,
-                pivot: Some(self.origin),
+                pivot: Some(self.origin + vec2(0.0, 1.0)),
                 ..Default::default()
             },
         );

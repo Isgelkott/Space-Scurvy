@@ -197,7 +197,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                         match id {
                             60..80 => {
                                 let map_animation = match id {
-                                    61 => (20.0, &ASSETS.laughing_man),
+                                    62 => (20.0, &ASSETS.laughing_man),
                                     _ => unreachable!(),
                                 };
                                 special_data.map_animations.push(MapAnimation {
