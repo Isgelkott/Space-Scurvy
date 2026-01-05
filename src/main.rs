@@ -97,7 +97,7 @@ impl Game {
     async fn update(&mut self) {
         clear_background(BLACK);
         self.backgrounds.update();
-        self.map.draw_background();
+        self.map.draw_level();
         update_map_animations(&mut self.map_animations);
 
         self.camera.target = self.player.pos;

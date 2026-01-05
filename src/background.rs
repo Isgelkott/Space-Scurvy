@@ -114,9 +114,10 @@ pub struct Background {
     spawn_chunks: Vec<f32>,
     size: Vec2,
 }
+const FREQUENZY: usize = 128;
 impl Background {
     pub fn new(size: Vec2) -> Self {
-        let amount = size.x as usize / 128;
+        let amount = size.x as usize / FREQUENZY;
         let mut spawn_chunks = Vec::with_capacity(amount);
         for i in 0..amount {
             spawn_chunks.push(gen_range(0.0, 10.0));
@@ -160,8 +161,10 @@ impl Background {
             if *chunk <= 0.0 {
                 dbg!(rand);
                 *chunk = 10.0;
-                self.objects
-                    .push(BackgroundObject::new(vec2((rand * 128) as f32, -64.0)));
+                self.objects.push(BackgroundObject::new(vec2(
+                    (rand * FREQUENZY) as f32,
+                    -64.0,
+                )));
             } else {
                 checked.push(rand);
             }

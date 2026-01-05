@@ -351,7 +351,7 @@ impl Level {
             }
         }
     }
-    pub fn draw_background(&self) {
+    pub fn draw_level(&self) {
         for (index, tile) in self.tiles.iter().enumerate() {
             let index = index as u32;
             for (layer, tile_data) in tile.data.iter() {
@@ -359,6 +359,14 @@ impl Level {
                     self.draw(tile_data, index);
                 }
             }
+            draw_rectangle(-400.0, -400.0, self.world_size.x + 400.0, 400.0, BLACK);
+            draw_rectangle(
+                -400.0,
+                self.world_size.y,
+                self.world_size.x + 400.0,
+                400.0,
+                BLACK,
+            );
         }
     }
     pub fn draw_foreground(&self) {
