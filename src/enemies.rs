@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::{collections::HashMap, f32::consts::PI, sync::LazyLock};
 
 use image::imageops::rotate180;
 use macroquad::prelude::*;
@@ -13,14 +13,14 @@ use crate::{
 };
 pub static ENEMY_IDS: LazyLock<HashMap<u8, PresetEnemies>> = LazyLock::new(|| {
     HashMap::from([
-        (140, PresetEnemies::Jetpacker),
-        (141, PresetEnemies::SpikeBall),
-        (142, PresetEnemies::MachineGunner),
-        (143, PresetEnemies::FireWagon),
+        (141, PresetEnemies::Jetpacker),
+        (142, PresetEnemies::SpikeBall),
+        (143, PresetEnemies::MachineGunner),
+        (144, PresetEnemies::FireWagon),
         (161, PresetEnemies::BombChain),
     ])
 });
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum PresetEnemies {
     Jetpacker,
     SpikeBall,
@@ -389,7 +389,7 @@ impl Enemy for BombChain {
             bomb_pos: Vec2::ZERO,
             bomb: &ASSETS.bomb,
             chain: &ASSETS.bomb_chain,
-            origin: pos,
+            origin: pos + vec2(0.0, 32.0),
             has_bomb: true,
             rotation: 0.0,
         })
@@ -398,13 +398,14 @@ impl Enemy for BombChain {
     fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
         self.rotation += 5.0 * get_frame_time();
         self.bomb_pos = self.origin
-            + self.chain.width() * vec2((self.rotation).cos(), (self.rotation).sin())
+            + (self.chain.width() + self.bomb.height() * 0.55)
+                * vec2((self.rotation).cos(), (self.rotation).sin())
             - self.bomb.size() / 2.0;
         draw_texture_ex(
             self.chain,
             self.origin.x,
             self.origin.y,
-            BLACK,
+            WHITE,
             DrawTextureParams {
                 rotation: self.rotation,
                 pivot: Some(self.origin),
@@ -416,8 +417,10 @@ impl Enemy for BombChain {
                 self.bomb,
                 self.bomb_pos.x,
                 self.bomb_pos.y,
-                BLACK,
+                WHITE,
                 DrawTextureParams {
+                    rotation: self.rotation + PI / 2.0,
+                    pivot: (Some(self.bomb_pos + self.bomb.size() / 2.0)),
                     ..Default::default()
                 },
             );

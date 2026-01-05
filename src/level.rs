@@ -181,15 +181,17 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
     let mut tiles: Vec<Tile> = Vec::with_capacity(((width) * (area.3 - area.1)) as usize);
 
     for y in area.1..=area.3 {
+        dbg!(y);
         for x in area.0..=area.2 {
             let mut tile = Tile {
                 data: vec![],
                 particle_generator: None,
             };
             for (chunks, layer) in layers.iter() {
-                if let Some(chunk) = chunks.get(&((x / 16 * 16), ((y / 16) * 16))) {
+                if let Some(chunk) = chunks.get(&(((x / 16) * 16), ((y / 16) * 16))) {
                     let id = chunk[(y % 16 * 16 + x % 16).max(0) as usize];
-                    let world_pos = vec2(x as f32, (y - y % 16) as f32) * TILE_SIZE;
+
+                    let world_pos = vec2((x - area.0) as f32, (y - area.1) as f32) * TILE_SIZE;
 
                     if id != 0 {
                         match id {
@@ -220,8 +222,15 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                             },
                             140..160 => {
                                 // enemies
-                                println!("found enemy, at {} with id {}", world_pos, id);
                                 let enemy = *ENEMY_IDS.get(&id).unwrap();
+                                dbg!(enemy, world_pos, id);
+                                special_data.enemies.push((enemy, world_pos));
+                            }
+                            160..180 => {
+                                // enemies with tiles
+
+                                let enemy = *ENEMY_IDS.get(&id).unwrap();
+                                dbg!(enemy, world_pos, id);
                                 special_data.enemies.push((enemy, world_pos));
                                 let id = id - 1;
                                 tile.data.push((
@@ -231,13 +240,6 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                                         id / tile_set_width,
                                     )),
                                 ));
-                            }
-                            160..180 => {
-                                // enemies with tiles
-
-                                println!("found enemy, at {}", world_pos);
-                                let enemy = *ENEMY_IDS.get(&id).unwrap();
-                                special_data.enemies.push((enemy, world_pos));
                             }
                             221 => {
                                 special_data.spawn_location = world_pos;
