@@ -189,7 +189,7 @@ impl Player {
                 if self.pos.y == y0 && !clamped_x {
                     self.velocity.y = 0.0;
                     self.grounded = true;
-                } else if self.pos.y == y1 && !clamped_x {
+                } else if self.pos.y == y1 {
                     self.velocity.y = 0.0;
                 }
             }

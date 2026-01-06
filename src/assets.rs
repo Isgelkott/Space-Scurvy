@@ -76,6 +76,7 @@ pub struct Assets {
     pub bomb_explode: Animation,
     pub background_objects: Vec<DisplayType>,
     pub spaceship: Animation,
+    pub star: Texture2D,
 }
 
 impl Assets {
@@ -84,6 +85,7 @@ impl Assets {
         let machine_gunner = include_bytes!("../assets/machine_gunner.aseprite");
         let fire_wagon = include_bytes!("../assets/fire_wagon.aseprite");
         Self {
+            star: load_ase_texture(include_bytes!("../assets/star.aseprite"), None, None),
             spaceship: load_animation(include_bytes!("../assets/spaceship.aseprite")),
             background_objects: vec![
                 DisplayType::Animation(load_animation(include_bytes!("../assets/earth.aseprite"))),

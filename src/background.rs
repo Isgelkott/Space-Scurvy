@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{f32::consts::PI, sync::LazyLock};
 
 use macroquad::{math::Vec2, prelude::*, rand::gen_range, texture::Texture2D};
 
@@ -6,7 +6,24 @@ use crate::{
     assets::*,
     utils::{Animation, AnimationMethods},
 };
-
+struct Star {
+    pos: Vec2,
+    direction: Vec2,
+    speed: f32,
+}
+impl Star {
+    fn new(pos: Vec2) -> Self {
+        Self {
+            pos,
+            direction: vec2(1.0, 1.0),
+            speed: 50.0,
+        }
+    }
+    fn update(&mut self) {
+        draw_texture(&ASSETS.star, self.pos.x, self.pos.y, WHITE);
+        self.pos += self.direction * self.speed * get_frame_time();
+    }
+}
 struct BackgroundObject {
     display: &'static DisplayType,
     pos: Vec2,
@@ -17,7 +34,6 @@ impl BackgroundObject {
     fn new(pos: Vec2) -> Self {
         let rand = gen_range(0, ASSETS.background_objects.len());
         let object = &ASSETS.background_objects[rand];
-        let top = gen_range(0, 2) == 1;
 
         Self {
             speed: gen_range(5.0, 10.0),
@@ -27,7 +43,7 @@ impl BackgroundObject {
         }
     }
     fn update(&mut self) {
-        let mut size;
+        let size;
         match &self.display {
             DisplayType::Animation(animation) => {
                 size = animation.get_size();
@@ -99,9 +115,14 @@ impl SpaceShip {
         let middle = self.pos + self.animation.get_size() / 2.0;
         for (index, color) in colors.iter().enumerate() {
             draw_rectangle(
-                self.origin.x,
+                self.origin.x.clamp(self.pos.x - 100.0, self.pos.x + 100.0),
                 middle.y - 3.0 + index as f32,
-                self.pos.x - self.origin.x + 5.0,
+                (self.pos.x - self.origin.x.clamp(self.pos.x - 100.0, self.pos.x + 100.0))
+                    + if self.direction.x.is_sign_negative() {
+                        self.animation.get_size().x - 5.0
+                    } else {
+                        5.0
+                    },
                 1.0,
                 *color,
             );
@@ -111,18 +132,30 @@ impl SpaceShip {
 pub struct Background {
     objects: Vec<BackgroundObject>,
     spaceship: Option<SpaceShip>,
+    stars: Vec<Star>,
     spawn_chunks: Vec<f32>,
     size: Vec2,
 }
-const FREQUENZY: usize = 128;
+const OBJECT_SIZE: usize = 128;
+
 impl Background {
     pub fn new(size: Vec2) -> Self {
-        let amount = size.x as usize / FREQUENZY;
+        let amount = size.x as usize / OBJECT_SIZE;
         let mut spawn_chunks = Vec::with_capacity(amount);
         for i in 0..amount {
             spawn_chunks.push(gen_range(0.0, 10.0));
         }
+        let mut stars = Vec::new();
+        for i in 0..(size.x as i32 / 10) {
+            stars.push(Star {
+                direction: (vec2(1., 1.0) + vec2(gen_range(-0.3, 0.3), gen_range(-0.3, 0.3)))
+                    .normalize(),
+                pos: vec2(i as f32 * 10.0 + gen_range(0.0, 10.0), 0.0),
+                speed: 50.0,
+            })
+        }
         Self {
+            stars,
             objects: Vec::new(),
             spawn_chunks,
             spaceship: None,
@@ -130,9 +163,17 @@ impl Background {
         }
     }
     pub fn update(&mut self) {
+        if let Some(spaceship) = &self.spaceship {
+            if spaceship.pos.x < 0.0 || spaceship.pos.x > self.size.x {
+                self.spaceship = None;
+            }
+        }
         if self.spaceship.is_none() {
             let right_edge = gen_range(0, 2) == 1;
-            let pos = vec2(0., gen_range(0.0, self.size.y));
+            let pos = Vec2 {
+                x: if right_edge { self.size.x } else { 0.0 },
+                y: gen_range(0.0, self.size.y),
+            };
             self.spaceship = Some(SpaceShip::new(
                 pos,
                 if right_edge {
@@ -162,12 +203,24 @@ impl Background {
                 dbg!(rand);
                 *chunk = 10.0;
                 self.objects.push(BackgroundObject::new(vec2(
-                    (rand * FREQUENZY) as f32,
+                    (rand * OBJECT_SIZE) as f32 + gen_range(0.0, OBJECT_SIZE as f32)
+                        - self.size.y * f32::to_radians(45.0).cos(),
                     -64.0,
                 )));
             } else {
                 checked.push(rand);
             }
+        }
+        self.stars
+            .retain(|f| f.pos.x < self.size.x || f.pos.y < self.size.y);
+        while self.stars.len() < (self.size.x as usize / 10) {
+            self.stars.push(Star::new(vec2(
+                gen_range(0.0, self.size.x) - self.size.y * PI / 4.0,
+                0.0,
+            )));
+        }
+        for star in &mut self.stars {
+            star.update();
         }
         for object in &mut self.objects {
             object.update();

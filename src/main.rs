@@ -100,7 +100,7 @@ impl Game {
         self.map.draw_level();
         update_map_animations(&mut self.map_animations);
 
-        self.camera.target = self.player.pos;
+        self.camera.target = self.player.pos - vec2(0.0, 10.0);
         update_projectiles(
             &mut self.player,
             &self.map,
@@ -143,6 +143,7 @@ impl GameManger {
 #[macroquad::main("krusbar")]
 async fn main() {
     let mut game = GameManger::new();
+    rand::srand((get_time() * 1000.0) as u64);
     loop {
         game.update().await;
         next_frame().await;
