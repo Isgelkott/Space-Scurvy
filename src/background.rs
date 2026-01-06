@@ -10,18 +10,28 @@ struct Star {
     pos: Vec2,
     direction: Vec2,
     speed: f32,
+    delay: f32,
 }
 impl Star {
-    fn new(pos: Vec2) -> Self {
+    fn new(pos: Vec2, world_size: Vec2) -> Self {
+        let speed = gen_range(40.0, 60.0);
         Self {
+            delay: gen_range(
+                0.0,
+                (world_size.y / vec2(1.0, 1.0).to_angle().cos()) / speed,
+            ),
             pos,
             direction: vec2(1.0, 1.0),
-            speed: 50.0,
+            speed,
         }
     }
     fn update(&mut self) {
-        draw_texture(&ASSETS.star, self.pos.x, self.pos.y, WHITE);
-        self.pos += self.direction * self.speed * get_frame_time();
+        if self.delay < 0.0 {
+            draw_texture(&ASSETS.star, self.pos.x, self.pos.y, WHITE);
+            self.pos += self.direction * self.speed * get_frame_time();
+        } else {
+            self.delay -= get_frame_time();
+        }
     }
 }
 struct BackgroundObject {
@@ -34,9 +44,12 @@ impl BackgroundObject {
     fn new(pos: Vec2) -> Self {
         let rand = gen_range(0, ASSETS.background_objects.len());
         let object = &ASSETS.background_objects[rand];
-
+        let size = match object {
+            DisplayType::Animation(animation) => animation.get_size(),
+            DisplayType::Texture(texture) => texture.size(),
+        };
         Self {
-            speed: gen_range(5.0, 10.0),
+            speed: gen_range(500.0, 720.0) / size.x,
             display: object,
             pos,
             direction: (vec2(1.0, 1.0).normalize()),
@@ -131,10 +144,11 @@ impl SpaceShip {
 }
 pub struct Background {
     objects: Vec<BackgroundObject>,
-    spaceship: Option<SpaceShip>,
+    spaceships: Vec<SpaceShip>,
     stars: Vec<Star>,
     spawn_chunks: Vec<f32>,
     size: Vec2,
+    star_amount: u32,
 }
 const OBJECT_SIZE: usize = 128;
 
@@ -145,44 +159,38 @@ impl Background {
         for i in 0..amount {
             spawn_chunks.push(gen_range(0.0, 10.0));
         }
-        let mut stars = Vec::new();
-        for i in 0..(size.x as i32 / 10) {
-            stars.push(Star {
-                direction: (vec2(1., 1.0) + vec2(gen_range(-0.3, 0.3), gen_range(-0.3, 0.3)))
-                    .normalize(),
-                pos: vec2(i as f32 * 10.0 + gen_range(0.0, 10.0), 0.0),
-                speed: 50.0,
-            })
-        }
+        let stars = Vec::new();
+
         Self {
             stars,
             objects: Vec::new(),
             spawn_chunks,
-            spaceship: None,
+            star_amount: size.x as u32 / 5,
+            spaceships: Vec::new(),
             size,
         }
     }
     pub fn update(&mut self) {
-        if let Some(spaceship) = &self.spaceship {
+        for (index, spaceship) in self.spaceships.iter_mut().enumerate() {
             if spaceship.pos.x < 0.0 || spaceship.pos.x > self.size.x {
-                self.spaceship = None;
+                let right_edge = gen_range(0, 2) == 1;
+                let pos = Vec2 {
+                    x: if right_edge { self.size.x } else { 0.0 },
+                    y: gen_range((index * 400) as f32, (index * 400) as f32),
+                };
+                *spaceship = SpaceShip::new(
+                    pos,
+                    if right_edge {
+                        vec2(-1.0, 0.0)
+                    } else {
+                        vec2(1.0, 0.0)
+                    },
+                );
+            } else {
+                spaceship.update();
             }
         }
-        if self.spaceship.is_none() {
-            let right_edge = gen_range(0, 2) == 1;
-            let pos = Vec2 {
-                x: if right_edge { self.size.x } else { 0.0 },
-                y: gen_range(0.0, self.size.y),
-            };
-            self.spaceship = Some(SpaceShip::new(
-                pos,
-                if right_edge {
-                    vec2(-1.0, 0.0)
-                } else {
-                    vec2(1.0, 0.0)
-                },
-            ));
-        }
+
         for chunk in &mut self.spawn_chunks {
             *chunk -= get_frame_time();
         }
@@ -213,20 +221,17 @@ impl Background {
         }
         self.stars
             .retain(|f| f.pos.x < self.size.x || f.pos.y < self.size.y);
-        while self.stars.len() < (self.size.x as usize / 10) {
-            self.stars.push(Star::new(vec2(
-                gen_range(0.0, self.size.x) - self.size.y * PI / 4.0,
-                0.0,
-            )));
+        while self.stars.len() < self.star_amount as usize {
+            self.stars.push(Star::new(
+                vec2(gen_range(0.0, self.size.x) - self.size.y * PI / 4.0, 0.0),
+                self.size,
+            ));
         }
         for star in &mut self.stars {
             star.update();
         }
         for object in &mut self.objects {
             object.update();
-        }
-        if let Some(spaceship) = &mut self.spaceship {
-            spaceship.update();
         }
     }
 }

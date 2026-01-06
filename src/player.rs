@@ -30,9 +30,7 @@ impl Player {
         }
     }
     pub fn knockback(&mut self, point: Vec2, strength: f32) {
-        if self.iframes.is_none() {
-            self.velocity += strength * ((self.pos + self.size / 2.0) - point).normalize_or_zero()
-        }
+        self.velocity += strength * ((self.pos + self.size / 2.0) - point).normalize_or_zero()
     }
     pub fn new(pos: Vec2) -> Self {
         Self {
