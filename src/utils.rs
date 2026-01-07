@@ -104,7 +104,7 @@ pub struct Spritesheet {
     size: (f32, f32),
 }
 impl Spritesheet {
-    pub fn draw_from(&self, coord: (u8, u8), pos: Vec2, params: Option<DrawTextureParams>) {
+    pub fn draw_from(&self, coord: (u16, u16), pos: Vec2, params: Option<DrawTextureParams>) {
         let mut params = params.unwrap_or_default();
         params.source = Some(Rect {
             x: coord.0 as f32 * self.size.0,

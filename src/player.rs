@@ -117,6 +117,12 @@ impl Player {
                 if collision {
                     if self.pos.y + self.size.y < bounds.0.y && f.on_jumped_on_by_player() {
                         self.velocity.y = -200.0;
+                        particles.push(Particle::new(
+                            Box::new(|f| ASSETS.blood.play(f, None)),
+                            crate::particles::Lifetime::ByTime(ASSETS.blood.get_duration()),
+                            None,
+                            self.pos,
+                        ));
                         return false;
                     } else {
                         if let Some((knockback_origin, knockback_strenght, damage)) =

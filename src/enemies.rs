@@ -11,7 +11,7 @@ use crate::{
     player::{self, Player},
     utils::{Animation, AnimationMethods, BULLET_MATERIAL, check_collision},
 };
-pub static ENEMY_IDS: LazyLock<HashMap<u8, PresetEnemies>> = LazyLock::new(|| {
+pub static ENEMY_IDS: LazyLock<HashMap<u16, PresetEnemies>> = LazyLock::new(|| {
     HashMap::from([
         (141, PresetEnemies::Jetpacker),
         (142, PresetEnemies::SpikeBall),
@@ -176,10 +176,10 @@ pub struct EnergyBall {
     size: Vec2,
 }
 impl EnergyBall {
-    fn new(pos: Vec2, x_flipped: bool) -> Self {
+    fn new(pos: Vec2, direction: Vec2) -> Self {
         Self {
             animation: &ASSETS.energy_ball,
-            velocity: vec2(40.0, 0.0) * if x_flipped { 1.0 } else { -1.0 },
+            velocity: 40.0 * direction,
             pos,
             size: vec2(16.0, 16.0),
         }
@@ -563,7 +563,13 @@ impl Enemy for Jetpacker {
         Self: Sized,
     {
         let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
-        let mut tile = (map_pos.y as usize - 1) * map.width as usize + map_pos.x as usize;
+        let mut tile = (map_pos.y as usize + 2) * map.width as usize + map_pos.x as usize;
+        let ground_animation = if map.tiles[tile].data.iter().any(|f| f.0 == Layer::Collision) {
+            &ASSETS.jetpacker.idle
+        } else {
+            &ASSETS.jetpacker.fly
+        };
+        tile = tile - 3 * map.width as usize;
         let mut fly_height = 0.0;
         while map.tiles[tile].data.iter().any(|f| f.0 == Layer::Path) {
             println!("path above at tile {}", tile);
@@ -572,9 +578,10 @@ impl Enemy for Jetpacker {
         }
         let flight_speed = -50.0;
         let flight_time = (fly_height / flight_speed).abs();
+
         dbg!(flight_time);
         let curve: [(f32, f32, &Animation, bool); 6] = [
-            (0.0, 0.0, &ASSETS.jetpacker.idle, false),
+            (0.0, 0.0, ground_animation, false),
             (1.5, 0.0, &ASSETS.jetpacker.fly, false),
             (flight_time + 1.5, fly_height, &ASSETS.jetpacker.fly, false),
             (
@@ -682,7 +689,7 @@ impl Enemy for Jetpacker {
                                         vec2(-10.0, 0.0)
                                     }
                                     + vec2(0.0, 5.0),
-                                self.flipped,
+                                ((player.pos + player.size / 2.0) - (self.pos)).normalize_or_zero(),
                             )));
                         }
                         break;

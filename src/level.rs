@@ -33,7 +33,7 @@ impl Layer {
     }
 }
 pub enum TileData {
-    SpritesheetCoord((u8, u8)),
+    SpritesheetCoord((u16, u16)),
     Animation(&'static Animation),
 }
 pub struct Tile {
@@ -50,10 +50,10 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
         .split_once("\"")
         .unwrap()
         .0
-        .parse::<u8>()
+        .parse::<u16>()
         .unwrap();
     dbg!(tile_set_width);
-    fn get_area(chunks: &HashMap<(i32, i32), [u8; 256]>) -> Option<(i32, i32, i32, i32)> {
+    fn get_area(chunks: &HashMap<(i32, i32), [u16; 256]>) -> Option<(i32, i32, i32, i32)> {
         let posses: Vec<(i32, i32, i32, i32)> = chunks
             .iter()
             .map(|f| {
@@ -103,7 +103,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
 
         Some((lowest_x, lowest_y, highest_x, highest_y))
     }
-    let mut layers: Vec<(HashMap<(i32, i32), [u8; 256]>, Layer)> = Vec::new();
+    let mut layers: Vec<(HashMap<(i32, i32), [u16; 256]>, Layer)> = Vec::new();
     for layer in tilemap.split("<layer").skip(1) {
         let name = layer
             .split_once("name=\"")
@@ -113,7 +113,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
             .unwrap()
             .0;
         dbg!(name);
-        let mut chunks: HashMap<(i32, i32), [u8; 256]> = HashMap::new();
+        let mut chunks: HashMap<(i32, i32), [u16; 256]> = HashMap::new();
         for chunk in layer.split("<chunk").skip(1) {
             let x = chunk
                 .split_once("x=\"")
@@ -150,7 +150,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                     id
                 };
 
-                data[index] = id.parse::<u8>().unwrap();
+                data[index] = id.parse::<u16>().unwrap();
             }
             if data.iter().all(|f| *f == 0) {
                 println!("chunk x: {},y: {} is empty ", x, y);
@@ -194,7 +194,6 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                     let id = chunk[(y % 16 * 16 + x % 16).max(0) as usize];
 
                     let world_pos = vec2((x - area.0) as f32, (y - area.1) as f32) * TILE_SIZE;
-
                     if id != 0 {
                         match id {
                             60..80 => {
@@ -212,16 +211,19 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                                     turn_off: &map_animation.1.2,
                                 });
                             }
-                            80..100 => match id {
-                                80 => {
-                                    tile.particle_generator = Some(ParticleGenerator::new(
-                                        world_pos,
-                                        crate::particles::ParticleType::Acid,
-                                    ));
-                                    tile.data.push((*layer, TileData::Animation(&ASSETS.acid)));
+                            80..100 => {
+                                dbg!(id);
+                                match id {
+                                    81 => {
+                                        tile.particle_generator = Some(ParticleGenerator::new(
+                                            world_pos,
+                                            crate::particles::ParticleType::Acid,
+                                        ));
+                                        tile.data.push((*layer, TileData::Animation(&ASSETS.acid)));
+                                    }
+                                    _ => panic!(),
                                 }
-                                _ => panic!(),
-                            },
+                            }
                             140..160 => {
                                 // enemies
                                 let enemy = *ENEMY_IDS.get(&id).unwrap();
