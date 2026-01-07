@@ -190,6 +190,17 @@ impl Player {
                 } else if self.pos.y == y1 {
                     self.velocity.y = 0.0;
                 }
+            } else if index > 3 {
+                if pottential_collider
+                    .data
+                    .iter()
+                    .any(|f| f.0 == Layer::OneWayCollision)
+                {
+                    if self.velocity.y.is_sign_positive() {
+                        self.velocity.y = 0.0;
+                        self.grounded = true;
+                    }
+                }
             }
         }
         if self.grounded {

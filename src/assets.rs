@@ -49,6 +49,7 @@ impl JetpackerAnimation {
         }
     }
 }
+#[derive(PartialEq)]
 pub enum DisplayType {
     Texture(Texture2D),
     Animation(Animation),
@@ -74,7 +75,7 @@ pub struct Assets {
     pub bomb_chain: Texture2D,
     pub bomb: Texture2D,
     pub bomb_explode: Animation,
-    pub background_objects: Vec<DisplayType>,
+    pub background_objects: Vec<(DisplayType, Option<f32>)>,
     pub spaceship: Animation,
     pub star: Texture2D,
     pub debris: Texture2D,
@@ -90,17 +91,28 @@ impl Assets {
             star: load_ase_texture(include_bytes!("../assets/star.aseprite"), None, None),
             spaceship: load_animation(include_bytes!("../assets/spaceship.aseprite")),
             background_objects: vec![
-                DisplayType::Animation(load_animation(include_bytes!("../assets/earth.aseprite"))),
-                DisplayType::Texture(load_ase_texture(
-                    include_bytes!("../assets/abandonded.aseprite"),
+                (
+                    DisplayType::Animation(load_animation(include_bytes!(
+                        "../assets/earth.aseprite"
+                    ))),
                     None,
-                    None,
-                )),
-                DisplayType::Texture(load_ase_texture(
-                    include_bytes!("../assets/rock.aseprite"),
-                    None,
-                    None,
-                )),
+                ),
+                (
+                    DisplayType::Texture(load_ase_texture(
+                        include_bytes!("../assets/abandonded.aseprite"),
+                        None,
+                        None,
+                    )),
+                    Some(0.02),
+                ),
+                (
+                    DisplayType::Texture(load_ase_texture(
+                        include_bytes!("../assets/rock.aseprite"),
+                        None,
+                        None,
+                    )),
+                    Some(0.03),
+                ),
             ],
             bomb_explode: load_animation(include_bytes!("../assets/bomb_explode.aseprite")),
             bomb_chain: load_ase_texture(

@@ -13,6 +13,7 @@ pub enum Layer {
     Collision,
     Decor,
     OverPlayer,
+    OneWayCollision,
     Enemies,
     Special,
     Path,
@@ -22,6 +23,7 @@ impl Layer {
         match input {
             "collision" => Self::Collision,
             input if input.contains("decor") => Self::Decor,
+            "one_way" => Self::OneWayCollision,
             "over_player" => Self::OverPlayer,
             "enemies" => Self::Enemies,
             "special" => Self::Special,

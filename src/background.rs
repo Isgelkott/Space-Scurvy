@@ -14,7 +14,7 @@ struct Star {
 }
 impl Star {
     fn new(pos: Vec2, world_size: Vec2) -> Self {
-        let speed = gen_range(40.0, 60.0);
+        let speed = gen_range(10.0, 20.0);
         Self {
             delay: gen_range(
                 0.0,
@@ -27,7 +27,7 @@ impl Star {
     }
     fn update(&mut self) {
         if self.delay < 0.0 {
-            draw_texture(&ASSETS.star, self.pos.x, self.pos.y, WHITE);
+            draw_texture(&ASSETS.star, self.pos.x.floor(), self.pos.y.floor(), WHITE);
             self.pos += self.direction * self.speed * get_frame_time();
         } else {
             self.delay -= get_frame_time();
@@ -39,32 +39,62 @@ struct BackgroundObject {
     pos: Vec2,
     direction: Vec2,
     speed: f32,
+    rotation: f32,
+    rotation_mod: f32,
 }
 impl BackgroundObject {
-    fn new(pos: Vec2) -> Self {
+    fn new(pos: Vec2, last_object: &DisplayType) -> Self {
         let rand = gen_range(0, ASSETS.background_objects.len());
-        let object = &ASSETS.background_objects[rand];
-        let size = match object {
+        let mut object = &ASSETS.background_objects[rand];
+        while object.0 == *last_object {
+            object = &ASSETS.background_objects[rand]
+        }
+
+        let size = match &object.0 {
             DisplayType::Animation(animation) => animation.get_size(),
             DisplayType::Texture(texture) => texture.size(),
         };
+        let rotation_mod = if let Some(rotation_mod) = object.1 {
+            rotation_mod
+        } else {
+            0.0
+        };
+
         Self {
-            speed: gen_range(500.0, 720.0) / size.x,
-            display: object,
+            speed: (gen_range(300.0, 420.0) / size.x).ceil(),
+            display: &object.0,
             pos,
-            direction: (vec2(1.0, 1.0).normalize()),
+            direction: (vec2(1.0, 1.0)),
+            rotation: 0.0,
+            rotation_mod,
         }
     }
     fn update(&mut self) {
         let size;
+        self.rotation += self.rotation_mod;
         match &self.display {
             DisplayType::Animation(animation) => {
                 size = animation.get_size();
-                animation.play(self.pos, None)
+                animation.play(
+                    self.pos,
+                    Some(DrawTextureParams {
+                        rotation: self.rotation,
+                        ..Default::default()
+                    }),
+                )
             }
             DisplayType::Texture(texture) => {
                 size = texture.size();
-                draw_texture(&texture, self.pos.x, self.pos.y, WHITE)
+                draw_texture_ex(
+                    &texture,
+                    self.pos.x,
+                    self.pos.y,
+                    WHITE,
+                    DrawTextureParams {
+                        rotation: self.rotation,
+                        ..Default::default()
+                    },
+                )
             }
         }
         draw_circle(
@@ -78,6 +108,7 @@ impl BackgroundObject {
                 a: (0.1),
             },
         );
+
         self.pos += self.direction * self.speed * get_frame_time()
     }
 }
@@ -145,6 +176,7 @@ impl SpaceShip {
 pub struct Background {
     objects: Vec<BackgroundObject>,
     spaceships: Vec<SpaceShip>,
+    last_object: DisplayType,
     stars: Vec<Star>,
     spawn_chunks: Vec<f32>,
     size: Vec2,
@@ -164,6 +196,7 @@ impl Background {
         Self {
             stars,
             objects: Vec::new(),
+            last_object: DisplayType::Texture(Texture2D::empty()),
             spawn_chunks,
             star_amount: size.x as u32 / 5,
             spaceships: Vec::new(),
@@ -210,11 +243,14 @@ impl Background {
             if *chunk <= 0.0 {
                 dbg!(rand);
                 *chunk = 10.0;
-                self.objects.push(BackgroundObject::new(vec2(
-                    (rand * OBJECT_SIZE) as f32 + gen_range(0.0, OBJECT_SIZE as f32)
-                        - self.size.y * f32::to_radians(45.0).cos(),
-                    -64.0,
-                )));
+                self.objects.push(BackgroundObject::new(
+                    vec2(
+                        (rand * OBJECT_SIZE) as f32 + gen_range(0.0, OBJECT_SIZE as f32)
+                            - self.size.y * f32::to_radians(45.0).cos(),
+                        -64.0,
+                    ),
+                    &self.last_object,
+                ));
             } else {
                 checked.push(rand);
             }
@@ -223,7 +259,7 @@ impl Background {
             .retain(|f| f.pos.x < self.size.x || f.pos.y < self.size.y);
         while self.stars.len() < self.star_amount as usize {
             self.stars.push(Star::new(
-                vec2(gen_range(0.0, self.size.x) - self.size.y * PI / 4.0, 0.0),
+                vec2(gen_range(0.0, self.size.x) - self.size.y * PI / 4.0, 0.0).floor(),
                 self.size,
             ));
         }
