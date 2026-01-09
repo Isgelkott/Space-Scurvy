@@ -9,7 +9,6 @@ use macroquad::prelude::*;
 
 pub struct Player {
     pub hp: u32,
-    last_hp: u32,
     pub pos: Vec2,
     pub size: Vec2,
     velocity: Vec2,
@@ -21,7 +20,7 @@ pub struct Player {
 }
 const AIR_DRAG: f32 = 0.3;
 const FRICITON: f32 = 0.93;
-const GRAVITY: f32 = 5.;
+const GRAVITY: f32 = 7.;
 impl Player {
     pub fn damage(&mut self, dmg: u32) {
         if self.iframes.is_none() {
@@ -35,7 +34,6 @@ impl Player {
     pub fn new(pos: Vec2) -> Self {
         Self {
             iframes: None,
-            last_hp: 100,
             hp: 100,
             previous_flipped: true,
             current_top_animation: None,
@@ -88,7 +86,7 @@ impl Player {
         if self.grounded {
             self.velocity.x += direction * self.speed;
             if is_key_pressed(KeyCode::Space) {
-                self.velocity.y = -300.0;
+                self.velocity.y = -220.0;
             }
         } else {
             self.velocity.x = (self.velocity.x + direction * self.speed) * FRICITON;
@@ -206,6 +204,10 @@ impl Player {
                         self.velocity.y = 0.0;
                         self.grounded = true;
                     }
+                }
+            } else {
+                if pottential_collider.data.iter().any(|f| f.0 == Layer::Death) {
+                    //Die
                 }
             }
         }

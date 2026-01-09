@@ -19,16 +19,20 @@ mod utils;
 
 const SCREEN_SIZE: (f32, f32) = (200.0, 200.0);
 
-struct Game {
+pub struct Game {
+    win: bool,
     scale_factor: f32,
     map: Level,
     backgrounds: Background,
     player: Player,
     camera: Camera2D,
     enemies: Vec<Box<dyn Enemy>>,
+    pickups: Vec<Pickup>,
     projectiles: Vec<Box<dyn Projectile>>,
     particles: Vec<Particle>,
     map_animations: Vec<MapAnimation>,
+    levels: Vec<Levels>,
+    level_index: usize,
 }
 impl Game {
     fn draw_hud(&self) {
@@ -62,6 +66,10 @@ impl Game {
             enemies.push(enemy.0.spawn(enemy.1, &map))
         }
         Self {
+            level_index: 0,
+            levels: vec![Levels::TestLevel],
+            win: false,
+            pickups: special_data.pickups,
             backgrounds: Background::new(map.world_size),
             scale_factor: 1.0,
             particles: Vec::new(),
@@ -114,6 +122,7 @@ impl Game {
             &mut self.enemies,
             &mut self.particles,
         );
+        update_pickups(self);
         update_enemies(
             &self.player,
             &mut self.enemies,
@@ -126,6 +135,18 @@ impl Game {
         update_particles(&mut self.particles);
         self.draw_camera();
         self.draw_hud();
+        if self.win {
+            self.level_index += 1;
+            let level = Level::new(self.levels[self.level_index]);
+            self.map = level.0;
+            let mut enemies = Vec::new();
+            for enemy in level.1.enemies.iter() {
+                enemies.push(enemy.0.spawn(enemy.1, &self.map))
+            }
+            self.enemies = enemies;
+            self.map_animations = level.1.map_animations;
+            self.pickups = level.1.pickups;
+        }
     }
 }
 

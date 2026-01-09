@@ -158,7 +158,7 @@ impl Projectile for Bullet {
     fn update(&mut self, _player: &mut Player, map: &Level) {
         self.pos += self.direction * self.speed * get_frame_time();
         gl_use_material(&BULLET_MATERIAL);
-        BULLET_MATERIAL.set_uniform("alpha", 1.0 / (self.pos.x - self.origin.x).abs());
+        BULLET_MATERIAL.set_uniform("alpha", 1.0 / (self.pos.x - self.origin.x).abs().powf(1.5));
         draw_rectangle(
             self.origin.x,
             self.origin.y,
@@ -689,7 +689,8 @@ impl Enemy for Jetpacker {
                                         vec2(-10.0, 0.0)
                                     }
                                     + vec2(0.0, 5.0),
-                                ((player.pos + player.size / 2.0) - (self.pos)).normalize_or_zero(),
+                                ((player.pos + player.size / 2.0) - (self.pos + self.size / 2.0))
+                                    .normalize_or_zero(),
                             )));
                         }
                         break;

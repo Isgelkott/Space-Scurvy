@@ -79,6 +79,7 @@ pub struct Assets {
     pub spaceship: Animation,
     pub star: Texture2D,
     pub debris: Texture2D,
+    pub lemon_pickup: Animation,
 }
 
 impl Assets {
@@ -87,6 +88,7 @@ impl Assets {
         let machine_gunner = include_bytes!("../assets/machine_gunner.aseprite");
         let fire_wagon = include_bytes!("../assets/fire_wagon.aseprite");
         Self {
+            lemon_pickup: load_animation(include_bytes!("../assets/lemon_pickup.aseprite")),
             debris: load_ase_texture(include_bytes!("../assets/debris.aseprite"), None, None),
             star: load_ase_texture(include_bytes!("../assets/star.aseprite"), None, None),
             spaceship: load_animation(include_bytes!("../assets/spaceship.aseprite")),

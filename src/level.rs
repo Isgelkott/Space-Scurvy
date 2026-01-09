@@ -1,6 +1,7 @@
 use crate::{
+    Game,
     assets::ASSETS,
-    enemies::{ENEMY_IDS, Enemy, PresetEnemies},
+    enemies::{ENEMY_IDS, Enemy, PresetEnemies, check_collision_with_size},
     particles::ParticleGenerator,
     utils::{Animation, AnimationMethods},
 };
@@ -17,6 +18,7 @@ pub enum Layer {
     Enemies,
     Special,
     Path,
+    Death,
 }
 impl Layer {
     fn from_str(input: &str) -> Self {
@@ -28,6 +30,7 @@ impl Layer {
             "enemies" => Self::Enemies,
             "special" => Self::Special,
             "path" => Self::Path,
+            "death" => Self::Death,
             _ => panic!("no layer named {}", input),
         }
     }
@@ -248,6 +251,18 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                             221 => {
                                 special_data.spawn_location = world_pos;
                             }
+                            340..360 => {
+                                let pickup = match id {
+                                    341 => Pickup {
+                                        pickup_effect: PickupEffects::Win,
+                                        origin: world_pos,
+                                        size: ASSETS.lemon_pickup.get_size(),
+                                        animation: &ASSETS.lemon_pickup,
+                                    },
+                                    _ => panic!(),
+                                };
+                                special_data.pickups.push(pickup);
+                            }
                             _ => {
                                 let id = id - 1;
                                 tile.data.push((
@@ -268,6 +283,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
     ((tiles, (width + 1) as u32), special_data)
 }
 
+#[derive(Clone, Copy)]
 pub enum Levels {
     TestLevel,
 }
@@ -301,11 +317,39 @@ pub fn update_map_animations(animations: &mut Vec<MapAnimation>) {
         animation.update();
     }
 }
+#[derive(PartialEq)]
+enum PickupEffects {
+    Win,
+    Heal,
+}
+pub struct Pickup {
+    origin: Vec2,
+    size: Vec2,
+    animation: &'static Animation,
+    pickup_effect: PickupEffects,
+}
+pub fn update_pickups(game: &mut Game) {
+    game.pickups.retain(|pickup| {
+        let pos = vec2(
+            pickup.origin.x,
+            pickup.origin.y + (get_time() * 5.0).sin() as f32 * 5.0,
+        );
+        pickup.animation.play(pos, None);
+        if check_collision_with_size((pos, pickup.size), (game.player.pos, game.player.size)) {
+            if pickup.pickup_effect == PickupEffects::Win {
+                game.win = true;
+            }
+            return false;
+        }
+        return true;
+    });
+}
 #[derive(Default)]
 pub struct SpecialData {
     pub spawn_location: Vec2,
     pub enemies: Vec<(PresetEnemies, Vec2)>,
     pub map_animations: Vec<MapAnimation>,
+    pub pickups: Vec<Pickup>,
 }
 pub struct Level {
     pub tiles: Vec<Tile>,
