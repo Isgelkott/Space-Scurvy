@@ -15,7 +15,7 @@ pub struct Player {
     grounded: bool,
     speed: f32,
     current_top_animation: Option<(&'static Animation, f32)>,
-    previous_flipped: bool,
+    pub previous_flipped: bool,
     iframes: Option<f32>,
 }
 const AIR_DRAG: f32 = 0.3;

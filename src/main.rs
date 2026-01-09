@@ -31,7 +31,6 @@ pub struct Game {
     projectiles: Vec<Box<dyn Projectile>>,
     particles: Vec<Particle>,
     map_animations: Vec<MapAnimation>,
-    levels: Vec<Levels>,
     level_index: usize,
 }
 impl Game {
@@ -59,15 +58,16 @@ impl Game {
         gl_use_default_material();
         set_camera(&self.camera);
     }
-    fn new() -> Self {
-        let (map, special_data) = Level::new(Levels::TestLevel);
+
+    fn new(level: Levels) -> Self {
+        let (map, special_data) = Level::new(level);
         let mut enemies = Vec::new();
         for enemy in special_data.enemies.iter() {
             enemies.push(enemy.0.spawn(enemy.1, &map))
         }
         Self {
             level_index: 0,
-            levels: vec![Levels::TestLevel],
+
             win: false,
             pickups: special_data.pickups,
             backgrounds: Background::new(map.world_size),
@@ -99,7 +99,6 @@ impl Game {
                 ..Default::default()
             },
         );
-        set_camera(&self.camera);
     }
 
     async fn update(&mut self) {
@@ -116,12 +115,14 @@ impl Game {
             &mut self.particles,
             &mut self.enemies,
         );
-        self.player.update(
-            &self.map,
-            &mut self.projectiles,
-            &mut self.enemies,
-            &mut self.particles,
-        );
+        if !self.win {
+            self.player.update(
+                &self.map,
+                &mut self.projectiles,
+                &mut self.enemies,
+                &mut self.particles,
+            );
+        }
         update_pickups(self);
         update_enemies(
             &self.player,
@@ -133,32 +134,94 @@ impl Game {
 
         update_particle_generators(&mut self.map.tiles, &mut self.particles);
         update_particles(&mut self.particles);
-        self.draw_camera();
-        self.draw_hud();
-        if self.win {
-            self.level_index += 1;
-            let level = Level::new(self.levels[self.level_index]);
-            self.map = level.0;
-            let mut enemies = Vec::new();
-            for enemy in level.1.enemies.iter() {
-                enemies.push(enemy.0.spawn(enemy.1, &self.map))
-            }
-            self.enemies = enemies;
-            self.map_animations = level.1.map_animations;
-            self.pickups = level.1.pickups;
-        }
     }
 }
 
 struct GameManger {
     game: Game,
+    level_index: usize,
+    levels: Vec<Levels>,
+    win_animation_clock: f32,
 }
 impl GameManger {
     fn new() -> Self {
-        Self { game: Game::new() }
+        let levels = vec![Levels::TestLevel];
+        Self {
+            win_animation_clock: 0.0,
+            game: Game::new(levels[0]),
+            levels: levels,
+            level_index: 0,
+        }
     }
     async fn update(&mut self) {
+        set_camera(&self.game.camera);
         self.game.update().await;
+        let mut black_bars = false;
+
+        let transition_length = 2.0;
+        if self.game.win {
+            let pos = vec2(
+                self.game.player.pos.x
+                    - if self.game.player.previous_flipped {
+                        ASSETS.top_player_animations.idle.get_size().x
+                    } else {
+                        0.0
+                    },
+                self.game.player.pos.y
+                    - (ASSETS.win_animation.get_size().y
+                        - ASSETS.top_player_animations.idle.get_size().y),
+            );
+            self.win_animation_clock += get_frame_time();
+            if self.win_animation_clock > ASSETS.win_animation.get_duration() + transition_length {
+                self.level_index += 1;
+                self.game = Game::new(self.levels[self.level_index]);
+            } else if self.win_animation_clock > ASSETS.win_animation.get_duration() {
+                draw_texture_ex(
+                    &ASSETS.win_animation.0.last().unwrap().0,
+                    pos.x,
+                    pos.y,
+                    WHITE,
+                    DrawTextureParams {
+                        flip_x: self.game.player.previous_flipped,
+                        ..Default::default()
+                    },
+                );
+                black_bars = true;
+            } else {
+                ASSETS.win_animation.play_with_clock(
+                    vec2(pos.x, pos.y),
+                    self.win_animation_clock,
+                    Some(DrawTextureParams {
+                        flip_x: self.game.player.previous_flipped,
+                        ..Default::default()
+                    }),
+                );
+            }
+        }
+        self.game.draw_camera();
+        if black_bars {
+            draw_rectangle(
+                0.0,
+                0.0,
+                screen_width(),
+                (self.win_animation_clock - ASSETS.win_animation.get_duration())
+                    / transition_length
+                    * screen_height()
+                    / 2.0,
+                BLACK,
+            );
+            draw_rectangle(
+                0.0,
+                screen_height(),
+                screen_width(),
+                -(self.win_animation_clock - ASSETS.win_animation.get_duration())
+                    / transition_length
+                    * screen_height()
+                    / 2.0,
+                BLACK,
+            );
+        }
+        self.game.draw_hud();
     }
 }
 #[macroquad::main("krusbar")]
