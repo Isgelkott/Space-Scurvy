@@ -163,7 +163,9 @@ impl GameManger {
             let pos = vec2(
                 self.game.player.pos.x
                     - if self.game.player.previous_flipped {
-                        ASSETS.top_player_animations.idle.get_size().x
+                        (ASSETS.top_player_animations.idle.get_size().x
+                            + ASSETS.win_animation.get_size().x)
+                            / 2.0
                     } else {
                         0.0
                     },
