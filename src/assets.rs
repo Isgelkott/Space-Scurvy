@@ -81,6 +81,8 @@ pub struct Assets {
     pub debris: Texture2D,
     pub lemon_pickup: Animation,
     pub win_animation: Animation,
+    pub fish: Animation,
+    pub fish_bubbles: Animation,
 }
 
 impl Assets {
@@ -88,7 +90,10 @@ impl Assets {
         let laughing_man = include_bytes!("../assets/talking_dude.aseprite");
         let machine_gunner = include_bytes!("../assets/machine_gunner.aseprite");
         let fire_wagon = include_bytes!("../assets/fire_wagon.aseprite");
+        let fish = include_bytes!("../assets/fish.aseprite");
         Self {
+            fish_bubbles: load_animation_from_tag(fish, "bubbles"),
+            fish: load_animation_from_tag(fish, "attack"),
             win_animation: load_animation(include_bytes!("../assets/pirate_win.aseprite")),
             lemon_pickup: load_animation(include_bytes!("../assets/lemon_pickup.aseprite")),
             debris: load_ase_texture(include_bytes!("../assets/debris.aseprite"), None, None),

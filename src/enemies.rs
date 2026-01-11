@@ -6,17 +6,20 @@ use macroquad::prelude::*;
 use crate::{
     assets::ASSETS,
     enemies,
-    level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE},
+    level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE, TileData},
     particles::Particle,
     player::{self, Player},
-    utils::{Animation, AnimationMethods, BULLET_MATERIAL, check_collision},
+    utils::{
+        Animation, AnimationMethods, BULLET_MATERIAL, FISH_MATERIAL, check_collision, to_map_pos,
+    },
 };
-pub static ENEMY_IDS: LazyLock<HashMap<u16, PresetEnemies>> = LazyLock::new(|| {
+pub static ENEMY_IDS: LazyLock<HashMap<usize, PresetEnemies>> = LazyLock::new(|| {
     HashMap::from([
         (141, PresetEnemies::Jetpacker),
         (142, PresetEnemies::SpikeBall),
         (143, PresetEnemies::MachineGunner),
         (144, PresetEnemies::FireWagon),
+        (146, PresetEnemies::Fish),
         (161, PresetEnemies::BombChain),
     ])
 });
@@ -27,6 +30,7 @@ pub enum PresetEnemies {
     MachineGunner,
     FireWagon,
     BombChain,
+    Fish,
 }
 impl PresetEnemies {
     pub fn spawn(&self, pos: Vec2, map: &Level) -> Box<dyn Enemy> {
@@ -36,6 +40,7 @@ impl PresetEnemies {
             Self::MachineGunner => MachineGunner::spawn(pos, map),
             Self::FireWagon => FireWagon::spawn(pos, map),
             Self::BombChain => BombChain::spawn(pos + TILE_SIZE / 2.0, map),
+            Self::Fish => Fish::spawn(pos, map),
         }
     }
 }
@@ -121,6 +126,128 @@ pub trait Projectile {
         true
     }
     fn on_enemy_impact(&self, enemy: &mut dyn Enemy) {}
+}
+struct Fish {
+    pos: Vec2,
+    origin: Vec2,
+
+    size: Vec2,
+    is_attacking: bool,
+    attack_clock: f32,
+    attack_cooldown: f32,
+    direction: f32,
+}
+impl Enemy for Fish {
+    fn get_bounds(&self) -> (Vec2, Vec2) {
+        (self.pos, self.size)
+    }
+    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
+    where
+        Self: Sized,
+    {
+        let mut start_x = to_map_pos(pos, map.width);
+        let mut end_x = start_x;
+
+        while map.tiles[start_x]
+            .data
+            .iter()
+            .any(|f| f.1 == TileData::ID(80))
+        {
+            start_x -= 1;
+        }
+        while map.tiles[end_x]
+            .data
+            .iter()
+            .any(|f| f.1 == TileData::ID(80))
+        {
+            end_x += 1;
+        }
+        Box::new(Self {
+            origin: pos,
+            direction: 1.0,
+            attack_clock: 0.0,
+            attack_cooldown: 0.0,
+            is_attacking: false,
+            pos,
+            size: ASSETS.fish.get_size(),
+        })
+    }
+
+    fn on_jumped_on_by_player(&self) -> bool {
+        false
+    }
+    fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
+        self.attack_cooldown -= get_frame_time();
+        if self.pos.y > self.origin.y {
+            self.is_attacking = false;
+            self.attack_clock = 0.0;
+            self.pos.y = self.origin.y;
+        }
+
+        if self.is_attacking {
+            self.attack_clock += get_frame_time();
+
+            self.pos.y =
+                self.origin.y + 64.0 * self.attack_clock.powi(2) - 128.0 * self.attack_clock;
+
+            let rotation = if (128.0 * self.attack_clock - 128.0).is_sign_positive() {
+                PI
+            } else {
+                0.0
+            };
+            let shader = self.pos.y + self.size.y > self.origin.y;
+            if shader {
+                FISH_MATERIAL.set_uniform(
+                    "acidy",
+                    if rotation == 0.0 { -1.0 } else { 1.0 }
+                        - (self.origin.y - self.pos.y) / self.size.y,
+                );
+                gl_use_material(&FISH_MATERIAL);
+            }
+            ASSETS.fish.play(
+                self.pos,
+                Some(DrawTextureParams {
+                    rotation,
+                    ..Default::default()
+                }),
+            );
+            if shader {
+                gl_use_default_material();
+            }
+        } else {
+            'wa: {
+                let tile = to_map_pos(
+                    self.pos
+                        + vec2(self.direction, 0.0)
+                        + if self.direction.is_sign_positive() {
+                            self.size.x
+                        } else {
+                            0.0
+                        },
+                    map.width,
+                );
+                if (player.pos.x - (self.pos.x + self.size.x)).abs() < 20.0
+                    && self.attack_cooldown <= 0.0
+                {
+                    self.is_attacking = true;
+                    self.attack_cooldown = 12.0;
+                } else {
+                    ASSETS.fish_bubbles.play(self.pos, None);
+                    self.pos.x += self.direction;
+                }
+                if tile + 1 > map.tiles.len() {
+                    break 'wa;
+                }
+                if !map.tiles[tile]
+                    .data
+                    .iter()
+                    .any(|f| f.1 == TileData::Animation(&ASSETS.acid))
+                {
+                    self.direction *= -1.0;
+                }
+            }
+        }
+    }
 }
 pub struct Bullet {
     pos: Vec2,
@@ -532,7 +659,7 @@ impl Enemy for SpikeBall {
         let _ = &ASSETS.spike_ball.play(self.pos, None);
     }
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum JetpackerState {
     Normal,
     Hit,
@@ -556,7 +683,9 @@ impl Enemy for Jetpacker {
         (self.pos, self.size)
     }
     fn on_hit_by_player(&mut self) {
-        self.state = (JetpackerState::Hit, 0.0);
+        if self.state.0 != JetpackerState::Lie {
+            self.state = (JetpackerState::Hit, 0.0);
+        }
     }
     fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
     where

@@ -156,7 +156,7 @@ impl GameManger {
     async fn update(&mut self) {
         set_camera(&self.game.camera);
         self.game.update().await;
-        let mut black_bars = false;
+        let mut black_bars: bool = false;
 
         let transition_length = 2.0;
         if self.game.win {

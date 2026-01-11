@@ -35,8 +35,9 @@ impl Layer {
         }
     }
 }
+#[derive(PartialEq)]
 pub enum TileData {
-    SpritesheetCoord((u16, u16)),
+    ID(usize),
     Animation(&'static Animation),
 }
 pub struct Tile {
@@ -44,7 +45,7 @@ pub struct Tile {
     pub particle_generator: Option<ParticleGenerator>,
 }
 
-pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialData) {
+pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), SpecialData, usize) {
     let mut special_data = SpecialData::default();
     let tile_set_width = tileset
         .split_once("columns=\"")
@@ -53,7 +54,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
         .split_once("\"")
         .unwrap()
         .0
-        .parse::<u16>()
+        .parse::<usize>()
         .unwrap();
     dbg!(tile_set_width);
     fn get_area(chunks: &HashMap<(i32, i32), [u16; 256]>) -> Option<(i32, i32, i32, i32)> {
@@ -187,14 +188,14 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
 
     for y in area.1..=area.3 {
         dbg!(y);
-        for x in area.0..=area.2 {
+        for x in area.0..area.2 {
             let mut tile = Tile {
                 data: vec![],
                 particle_generator: None,
             };
             for (chunks, layer) in layers.iter() {
                 if let Some(chunk) = chunks.get(&(((x / 16) * 16), ((y / 16) * 16))) {
-                    let id = chunk[(y % 16 * 16 + x % 16).max(0) as usize];
+                    let id = chunk[(y * 16 + x % 16).max(0) as usize] as usize;
 
                     let world_pos = vec2((x - area.0) as f32, (y - area.1) as f32) * TILE_SIZE;
                     if id != 0 {
@@ -214,21 +215,19 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                                     turn_off: &map_animation.1.2,
                                 });
                             }
-                            80..100 => {
-                                dbg!(id);
-                                match id {
-                                    81 => {
-                                        tile.particle_generator = Some(ParticleGenerator::new(
-                                            world_pos,
-                                            crate::particles::ParticleType::Acid,
-                                        ));
-                                        tile.data.push((*layer, TileData::Animation(&ASSETS.acid)));
-                                    }
-                                    _ => panic!(),
+                            80..100 => match id {
+                                81 => {
+                                    tile.particle_generator = Some(ParticleGenerator::new(
+                                        world_pos,
+                                        crate::particles::ParticleType::Acid,
+                                    ));
+                                    tile.data.push((*layer, TileData::Animation(&ASSETS.acid)));
                                 }
-                            }
+                                _ => panic!(),
+                            },
                             140..160 => {
                                 // enemies
+                                dbg!(id);
                                 let enemy = *ENEMY_IDS.get(&id).unwrap();
                                 dbg!(enemy, world_pos, id);
                                 special_data.enemies.push((enemy, world_pos));
@@ -240,13 +239,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                                 dbg!(enemy, world_pos, id);
                                 special_data.enemies.push((enemy, world_pos));
                                 let id = id - 1;
-                                tile.data.push((
-                                    *layer,
-                                    TileData::SpritesheetCoord((
-                                        id % tile_set_width,
-                                        id / tile_set_width,
-                                    )),
-                                ));
+                                tile.data.push((*layer, TileData::ID(id)));
                             }
                             221 => {
                                 special_data.spawn_location = world_pos;
@@ -265,13 +258,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
                             }
                             _ => {
                                 let id = id - 1;
-                                tile.data.push((
-                                    *layer,
-                                    TileData::SpritesheetCoord((
-                                        id % tile_set_width,
-                                        id / tile_set_width,
-                                    )),
-                                ));
+                                tile.data.push((*layer, TileData::ID(id)));
                             }
                         }
                     }
@@ -280,7 +267,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, u32), SpecialD
             tiles.push(tile);
         }
     }
-    ((tiles, (width + 1) as u32), special_data)
+    ((tiles, (width) as usize), special_data, tile_set_width)
 }
 
 #[derive(Clone, Copy)]
@@ -353,18 +340,21 @@ pub struct SpecialData {
 }
 pub struct Level {
     pub tiles: Vec<Tile>,
-    pub width: u32,
+    pub width: usize,
     pub world_size: Vec2,
+    tileset_width: usize,
 }
 impl Level {
     pub fn new(level: Levels) -> (Self, SpecialData) {
         let data = match level {
             Levels::TestLevel => include_str!("../assets/testlvl.tmx"),
         };
-        let (map, special_data) = load_tilemap(data, include_str!("../assets/tileset.tsx"));
+        let (map, special_data, tileset_width) =
+            load_tilemap(data, include_str!("../assets/tileset.tsx"));
         let height = map.0.len() as f32 / map.1 as f32;
         (
             Self {
+                tileset_width,
                 tiles: map.0,
                 width: map.1,
                 world_size: vec2(map.1 as f32 * TILE_SIZE, height * TILE_SIZE),
@@ -372,7 +362,7 @@ impl Level {
             special_data,
         )
     }
-    fn draw(&self, tile_data: &TileData, index: u32) {
+    fn draw(&self, tile_data: &TileData, index: usize) {
         let pos = vec2(
             (index % self.width) as f32 * TILE_SIZE,
             (index / self.width) as f32 * TILE_SIZE,
@@ -387,9 +377,9 @@ impl Level {
                     }),
                 );
             }
-            TileData::SpritesheetCoord(spritesheet_coords) => {
+            TileData::ID(id) => {
                 ASSETS.spritesheet.draw_from(
-                    *spritesheet_coords,
+                    (id % self.tileset_width, id / self.tileset_width),
                     pos,
                     Some(DrawTextureParams {
                         dest_size: Some(vec2(TILE_SIZE, TILE_SIZE)),
@@ -401,7 +391,6 @@ impl Level {
     }
     pub fn draw_level(&self) {
         for (index, tile) in self.tiles.iter().enumerate() {
-            let index = index as u32;
             for (layer, tile_data) in tile.data.iter() {
                 if *layer != Layer::Path && *layer != Layer::OverPlayer {
                     self.draw(tile_data, index);
@@ -419,7 +408,6 @@ impl Level {
     }
     pub fn draw_foreground(&self) {
         for (index, tile) in self.tiles.iter().enumerate() {
-            let index = index as u32;
             for (layer, tile_data) in tile.data.iter() {
                 if *layer == Layer::OverPlayer {
                     self.draw(tile_data, index);

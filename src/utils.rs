@@ -104,7 +104,7 @@ pub struct Spritesheet {
     size: (f32, f32),
 }
 impl Spritesheet {
-    pub fn draw_from(&self, coord: (u16, u16), pos: Vec2, params: Option<DrawTextureParams>) {
+    pub fn draw_from(&self, coord: (usize, usize), pos: Vec2, params: Option<DrawTextureParams>) {
         let mut params = params.unwrap_or_default();
         params.source = Some(Rect {
             x: coord.0 as f32 * self.size.0,
@@ -169,7 +169,52 @@ pub static BULLET_MATERIAL: LazyLock<Material> = std::sync::LazyLock::new(|| {
     )
     .unwrap()
 });
+const FISH_SHADER: &'static str = "#version 100
+precision lowp float;
 
+uniform lowp float acidy; 
+varying vec2 uv;
+uniform sampler2D Texture;
+
+
+
+void main() {
+    if (uv.y> acidy){
+    gl_FragColor = texture2D(Texture, uv);
+
+    }else{
+ gl_FragColor = vec4(0.0,0.0,0.0,0.0); 
+
+    }
+}
+";
+pub static FISH_MATERIAL: LazyLock<Material> = std::sync::LazyLock::new(|| {
+    let pipeline = PipelineParams {
+        alpha_blend: Some(BlendState::new(
+            Equation::Add,
+            BlendFactor::Value(BlendValue::SourceAlpha),
+            BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
+        )),
+        color_blend: Some(BlendState::new(
+            Equation::Add,
+            BlendFactor::Value(BlendValue::SourceAlpha),
+            BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
+        )),
+        ..Default::default()
+    };
+    load_material(
+        ShaderSource::Glsl {
+            vertex: DEFAULT_VERTEX_SHADER,
+            fragment: FISH_SHADER,
+        },
+        MaterialParams {
+            pipeline_params: pipeline,
+            uniforms: vec![UniformDesc::new("acidy", UniformType::Float1)],
+            ..Default::default()
+        },
+    )
+    .unwrap()
+});
 const DEFAULT_VERTEX_SHADER: &'static str = "#version 100
 precision lowp float;
 
