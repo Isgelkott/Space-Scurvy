@@ -3,52 +3,6 @@ use std::sync::LazyLock;
 
 use crate::utils::*;
 
-pub struct TopPlayerAnimations {
-    pub idle: Animation,
-    pub shoot: Animation,
-}
-
-impl TopPlayerAnimations {
-    fn new() -> Self {
-        let data = include_bytes!("../assets/pirate.aseprite");
-        Self {
-            shoot: load_animation_from_tag(data, "shoot"),
-            idle: load_animation_from_tag(data, "idle_top"),
-        }
-    }
-}
-pub struct BotttomPlayerAnimations {
-    pub idle: Animation,
-    pub walk: Animation,
-}
-impl BotttomPlayerAnimations {
-    fn new() -> Self {
-        let data = include_bytes!("../assets/pirate.aseprite");
-        Self {
-            idle: load_animation_from_tag(data, "idle_bot"),
-            walk: load_animation_from_tag(data, "walk"),
-        }
-    }
-}
-pub struct JetpackerAnimation {
-    pub idle: Animation,
-    pub fly: Animation,
-    pub fall: Animation,
-    pub hit: Animation,
-    pub getup: Animation,
-}
-impl JetpackerAnimation {
-    fn new() -> Self {
-        let data = include_bytes!("../assets/jetpacker.aseprite");
-        Self {
-            hit: load_animation_from_tag(data, "hit"),
-            fall: load_animation_from_tag(data, "fall"),
-            idle: load_animation_from_tag(data, "idle"),
-            fly: load_animation_from_tag(data, "fly"),
-            getup: load_animation_from_tag(data, "getup"),
-        }
-    }
-}
 #[derive(PartialEq)]
 pub enum DisplayType {
     Texture(Texture2D),
@@ -56,21 +10,17 @@ pub enum DisplayType {
 }
 pub struct Assets {
     pub spritesheet: Spritesheet,
-    pub top_player_animations: TopPlayerAnimations,
-    pub bottom_player_animations: BotttomPlayerAnimations,
-    pub jetpacker: JetpackerAnimation,
+    pub player: AnimationGroup,
+    pub jetpacker: AnimationGroup,
     pub energy_ball: Animation,
-    pub spike_ball: Animation,
+    pub spike_ball: AnimationGroup,
     pub laser: Animation,
-    pub machine_gunner_shoot: Animation,
+    pub machine_gunner: AnimationGroup,
     pub energy_ball_shatter: Animation,
-    pub laughing_man: (Animation, Animation, Animation),
-    pub acid: Animation,
+    pub laughing_man: AnimationGroup,
+    pub acid: AnimationGroup,
     pub lemon: Texture2D,
-    pub machine_gunner_inactive: Animation,
-    pub fire_wagon_wheel: Animation,
-    pub fire_wagon_jiggle: Animation,
-    pub fire_wagon_fire: Animation,
+    pub fire_wagon: AnimationGroup,
     pub blood: Animation,
     pub bomb_chain: Texture2D,
     pub bomb: Texture2D,
@@ -81,19 +31,22 @@ pub struct Assets {
     pub debris: Texture2D,
     pub lemon_pickup: Animation,
     pub win_animation: Animation,
-    pub fish: Animation,
-    pub fish_bubbles: Animation,
+    pub fish: AnimationGroup,
 }
 
 impl Assets {
     fn new() -> Self {
-        let laughing_man = include_bytes!("../assets/talking_dude.aseprite");
-        let machine_gunner = include_bytes!("../assets/machine_gunner.aseprite");
-        let fire_wagon = include_bytes!("../assets/fire_wagon.aseprite");
-        let fish = include_bytes!("../assets/fish.aseprite");
         Self {
-            fish_bubbles: load_animation_from_tag(fish, "bubbles"),
-            fish: load_animation_from_tag(fish, "attack"),
+            acid: load_animation_group(include_bytes!("../assets/acid.aseprite")),
+            laser: load_animation(include_bytes!("../assets/laser.aseprite")),
+            laughing_man: load_animation_group(include_bytes!("../assets/talking_dude.aseprite")),
+            spike_ball: load_animation_group(include_bytes!("../assets/spikeball.aseprite")),
+            player: load_animation_group(include_bytes!("../assets/pirate.aseprite")),
+            machine_gunner: load_animation_group(include_bytes!(
+                "../assets/machine_gunner.aseprite"
+            )),
+            fire_wagon: load_animation_group(include_bytes!("../assets/fire_wagon.aseprite")),
+            fish: load_animation_group(include_bytes!("../assets/fish.aseprite")),
             win_animation: load_animation(include_bytes!("../assets/pirate_win.aseprite")),
             lemon_pickup: load_animation(include_bytes!("../assets/lemon_pickup.aseprite")),
             debris: load_ase_texture(include_bytes!("../assets/debris.aseprite"), None, None),
@@ -131,41 +84,19 @@ impl Assets {
             ),
             bomb: load_ase_texture(include_bytes!("../assets/bomb.aseprite"), None, None),
             blood: load_animation(include_bytes!("../assets/blood.aseprite")),
-            fire_wagon_fire: load_animation_from_tag(fire_wagon, "fire"),
-            fire_wagon_jiggle: load_animation_from_tag(fire_wagon, "jiggle"),
-            fire_wagon_wheel: load_animation_from_tag(fire_wagon, "drive"),
+
             lemon: load_ase_texture(include_bytes!("../assets/lemon.aseprite"), None, None),
-            acid: load_animation(include_bytes!("../assets/acid.aseprite")),
-            laughing_man: (
-                load_animation_from_tag(laughing_man, "off"),
-                load_animation_from_tag(laughing_man, "active"),
-                load_animation_from_tag(laughing_man, "turn_off"),
-            ),
 
             energy_ball_shatter: load_animation(include_bytes!(
                 "../assets/energy_ball_shatter.aseprite"
             )),
-            machine_gunner_shoot: load_animation_from_tag(
-                include_bytes!("../assets/machine_gunner.aseprite"),
-                "idle",
-            ),
-            machine_gunner_inactive: load_animation_from_tag(machine_gunner, "inactive"),
-            laser: load_animation_from_tag(include_bytes!("../assets/laser.aseprite"), "idle"),
-            spike_ball: load_animation_from_tag(
-                include_bytes!("../assets/spikeball.aseprite"),
-                "4",
-            ),
-            energy_ball: load_animation_from_tag(
-                include_bytes!("../assets/energy_ball.aseprite"),
-                "idle",
-            ),
-            jetpacker: JetpackerAnimation::new(),
+
+            energy_ball: load_animation(include_bytes!("../assets/energy_ball.aseprite")),
+            jetpacker: load_animation_group(include_bytes!("../assets/jetpacker.aseprite")),
             spritesheet: Spritesheet::new(
                 (16.0, 16.0),
                 load_ase_texture(include_bytes!("../assets/spritesheet.aseprite"), None, None),
             ),
-            top_player_animations: TopPlayerAnimations::new(),
-            bottom_player_animations: BotttomPlayerAnimations::new(),
         }
     }
 }

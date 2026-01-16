@@ -6,11 +6,12 @@ use macroquad::prelude::*;
 use crate::{
     assets::ASSETS,
     enemies,
-    level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE, TileData},
+    level::{Layer, Level, MAP_SCALE_FACTOR, SpecialData, SpecialTileData, TILE_SIZE, VisualData},
     particles::Particle,
-    player::{self, Player},
+    player::{self, DeathCause, Player},
     utils::{
-        Animation, AnimationMethods, BULLET_MATERIAL, FISH_MATERIAL, check_collision, to_map_pos,
+        Animation, AnimationGroup, AnimationMethods, BULLET_MATERIAL, FISH_MATERIAL,
+        check_collision, to_map_pos,
     },
 };
 pub static ENEMY_IDS: LazyLock<HashMap<usize, PresetEnemies>> = LazyLock::new(|| {
@@ -113,6 +114,9 @@ impl<'a> CollisionType<'a> {
 }
 pub trait Projectile {
     fn update(&mut self, player: &mut Player, map: &Level);
+    fn death_cause(&self) -> DeathCause {
+        DeathCause::Default
+    }
     fn particle(&self) -> Option<Particle> {
         None
     }
@@ -138,6 +142,9 @@ struct Fish {
     direction: f32,
 }
 impl Enemy for Fish {
+    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> Option<(Vec2, f32, u32)> {
+        Some((self.pos + self.size / 2.0, 400.0, 40))
+    }
     fn get_bounds(&self) -> (Vec2, Vec2) {
         (self.pos, self.size)
     }
@@ -149,22 +156,22 @@ impl Enemy for Fish {
         let mut end_x = start_x;
 
         while map.tiles[start_x]
-            .data
+            .special_data
             .iter()
-            .any(|f| f.1 == TileData::ID(80))
+            .any(|f| *f == SpecialTileData::Path)
         {
             start_x -= 1;
         }
         while map.tiles[end_x]
-            .data
+            .special_data
             .iter()
-            .any(|f| f.1 == TileData::ID(80))
+            .any(|f| *f == SpecialTileData::Path)
         {
             end_x += 1;
         }
         Box::new(Self {
             origin: pos,
-            direction: 1.0,
+            direction: 60.0,
             attack_clock: 0.0,
             attack_cooldown: 0.0,
             is_attacking: false,
@@ -204,7 +211,7 @@ impl Enemy for Fish {
                 );
                 gl_use_material(&FISH_MATERIAL);
             }
-            ASSETS.fish.play(
+            ASSETS.fish.get("jump").play(
                 self.pos,
                 Some(DrawTextureParams {
                     rotation,
@@ -217,33 +224,41 @@ impl Enemy for Fish {
         } else {
             'wa: {
                 let tile = to_map_pos(
-                    self.pos
-                        + vec2(self.direction, 0.0)
-                        + if self.direction.is_sign_positive() {
-                            self.size.x
-                        } else {
-                            0.0
-                        },
+                    vec2(
+                        self.pos.x
+                            + self.direction * get_frame_time()
+                            + if self.direction.is_sign_positive() {
+                                self.size.x
+                            } else {
+                                0.0
+                            },
+                        self.origin.y,
+                    ),
                     map.width,
                 );
+
                 if (player.pos.x - (self.pos.x + self.size.x)).abs() < 20.0
                     && self.attack_cooldown <= 0.0
                 {
+                    dbg!("attacking");
                     self.is_attacking = true;
-                    self.attack_cooldown = 12.0;
+                    self.attack_cooldown = 5.0;
                 } else {
-                    ASSETS.fish_bubbles.play(self.pos, None);
-                    self.pos.x += self.direction;
-                }
-                if tile + 1 > map.tiles.len() {
-                    break 'wa;
-                }
-                if !map.tiles[tile]
-                    .data
-                    .iter()
-                    .any(|f| f.1 == TileData::Animation(&ASSETS.acid))
-                {
-                    self.direction *= -1.0;
+                    ASSETS.fish.get("bubbles").play(self.pos, None);
+                    if tile + 1 > map.tiles.len() {
+                        dbg!("out of bounds fish");
+                        break 'wa;
+                    }
+                    if !map.tiles[tile]
+                        .special_data
+                        .iter()
+                        .any(|f| *f == SpecialTileData::Acid)
+                    {
+                        dbg!("beep bepp");
+                        self.direction *= -1.0;
+                    } else {
+                        self.pos.x += self.direction * get_frame_time();
+                    }
                 }
             }
         }
@@ -315,9 +330,12 @@ impl EnergyBall {
 
 impl Projectile for EnergyBall {
     fn on_player_impact(&self, player: &mut Player) -> bool {
-        player.damage(25);
+        player.damage(Some(25), DeathCause::Energy);
         player.knockback(self.pos + self.size / 2.0, 900.0);
         return true;
+    }
+    fn death_cause(&self) -> DeathCause {
+        DeathCause::Energy
     }
     fn particle(&self) -> Option<Particle> {
         Some(Particle::new(
@@ -351,7 +369,7 @@ impl Projectile for EnergyBall {
         self.animation.play(self.pos, None);
         self.pos += self.velocity * get_frame_time();
         if check_player_collision(self.pos, self.size, player) {
-            player.damage(20);
+            player.damage(Some(20), DeathCause::Energy);
         }
     }
 }
@@ -384,7 +402,7 @@ impl StandardProjectile {
 }
 impl Projectile for StandardProjectile {
     fn on_player_impact(&self, player: &mut Player) -> bool {
-        player.damage(self.damage);
+        player.damage(Some(self.damage), DeathCause::Default);
         return true;
     }
     fn update(&mut self, _player: &mut Player, _map: &Level) {
@@ -477,13 +495,17 @@ impl Enemy for FireWagon {
         });
         let diff = (player.pos.x + player.size.x / 2.0) - (self.pos.x + self.size.x / 2.0);
         if diff.signum() == self.direction.x.signum() && diff.abs() < 35.0 {
-            ASSETS.fire_wagon_fire.play(self.pos, params.clone());
-            self.size = ASSETS.fire_wagon_fire.get_size();
+            let animation = ASSETS.fire_wagon.get("fire");
+            animation.play(self.pos, params.clone());
+            self.size = animation.get_size();
         } else {
-            ASSETS.fire_wagon_jiggle.play(self.pos, params.clone());
+            ASSETS
+                .fire_wagon
+                .get("jiggle")
+                .play(self.pos, params.clone());
             self.size = vec2(11.0, 15.0)
         }
-        ASSETS.fire_wagon_wheel.play(self.pos, params);
+        ASSETS.fire_wagon.get("wheel").play(self.pos, params);
         self.pos += self.direction * self.speed * get_frame_time();
     }
 }
@@ -585,7 +607,7 @@ impl Enemy for MachineGunner {
     {
         Box::new(Self {
             flipped: false,
-            size: ASSETS.machine_gunner_shoot.get_size(),
+            size: ASSETS.machine_gunner.get_size(),
             pos,
             shoot_clock: 0.0,
             hit_clock: 0.0,
@@ -614,7 +636,7 @@ impl Enemy for MachineGunner {
             } else {
                 self.shoot_clock += get_frame_time();
             }
-            ASSETS.machine_gunner_shoot.play(
+            ASSETS.machine_gunner.get(&"shoot").play(
                 self.pos,
                 Some(DrawTextureParams {
                     flip_x: self.flipped,
@@ -622,7 +644,7 @@ impl Enemy for MachineGunner {
                 }),
             );
         } else {
-            ASSETS.machine_gunner_inactive.play(
+            ASSETS.machine_gunner.get("inactive").play(
                 self.pos,
                 Some(DrawTextureParams {
                     flip_x: self.flipped,
@@ -656,7 +678,7 @@ impl Enemy for SpikeBall {
     }
     fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
         self.pos += (player.pos - self.pos).normalize() * 10.0 * get_frame_time();
-        let _ = &ASSETS.spike_ball.play(self.pos, None);
+        let _ = &ASSETS.spike_ball.get("4").play(self.pos, None);
     }
 }
 #[derive(Debug, PartialEq)]
@@ -680,6 +702,9 @@ struct Jetpacker {
 
 impl Enemy for Jetpacker {
     fn get_bounds(&self) -> (Vec2, Vec2) {
+        if self.state.0 == JetpackerState::Lie || self.state.0 == JetpackerState::Hit {
+            return (vec2(self.pos.x, self.pos.y + 10.0), self.size);
+        }
         (self.pos, self.size)
     }
     fn on_hit_by_player(&mut self) {
@@ -693,14 +718,18 @@ impl Enemy for Jetpacker {
     {
         let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
         let mut tile = (map_pos.y as usize + 2) * map.width as usize + map_pos.x as usize;
-        let ground_animation = if map.tiles[tile].data.iter().any(|f| f.0 == Layer::Collision) {
-            &ASSETS.jetpacker.idle
+        let ground_animation = if map.tiles[tile].collision {
+            &ASSETS.jetpacker.get("idle")
         } else {
-            &ASSETS.jetpacker.fly
+            &ASSETS.jetpacker.get("fly")
         };
         tile = tile - 3 * map.width as usize;
         let mut fly_height = 0.0;
-        while map.tiles[tile].data.iter().any(|f| f.0 == Layer::Path) {
+        while map.tiles[tile]
+            .visual
+            .iter()
+            .any(|f| *f == VisualData::ID(240))
+        {
             println!("path above at tile {}", tile);
             tile = tile - map.width as usize;
             fly_height -= TILE_SIZE * MAP_SCALE_FACTOR;
@@ -709,27 +738,18 @@ impl Enemy for Jetpacker {
         let flight_time = (fly_height / flight_speed).abs();
 
         dbg!(flight_time);
+        let animation = ASSETS.jetpacker.get("fly");
         let curve: [(f32, f32, &Animation, bool); 6] = [
             (0.0, 0.0, ground_animation, false),
-            (1.5, 0.0, &ASSETS.jetpacker.fly, false),
-            (flight_time + 1.5, fly_height, &ASSETS.jetpacker.fly, false),
-            (
-                flight_time + 2.5 + 1.5,
-                fly_height,
-                &ASSETS.jetpacker.fly,
-                true,
-            ),
-            (
-                flight_time + 4.0 + 1.5,
-                fly_height,
-                &ASSETS.jetpacker.fly,
-                false,
-            ),
-            (flight_time + 5.0 + 1.5, 0.0, &ASSETS.jetpacker.fly, false),
+            (1.5, 0.0, animation, false),
+            (flight_time + 1.5, fly_height, animation, false),
+            (flight_time + 2.5 + 1.5, fly_height, animation, true),
+            (flight_time + 4.0 + 1.5, fly_height, animation, false),
+            (flight_time + 5.0 + 1.5, 0.0, animation, false),
         ];
         Box::new(Self {
             state: (JetpackerState::Normal, 0.0),
-            size: ASSETS.jetpacker.fly.get_size(),
+            size: ASSETS.jetpacker.get("fly").get_size(),
             fall_velocity: 0.0,
 
             behavior_curve: curve,
@@ -753,15 +773,15 @@ impl Enemy for Jetpacker {
         match self.state.0 {
             JetpackerState::Fall => {
                 self.fall_velocity += 2.0;
-                ASSETS.jetpacker.fall.play(self.pos, Some(params.clone()));
+                ASSETS
+                    .jetpacker
+                    .get("fall")
+                    .play(self.pos, Some(params.clone()));
             }
             JetpackerState::Getup => {
-                ASSETS.jetpacker.getup.play_with_clock(
-                    self.pos,
-                    self.state.1,
-                    Some(params.clone()),
-                );
-                if self.state.1 > ASSETS.jetpacker.getup.1 as f32 / 1000.0 {
+                let animation = ASSETS.jetpacker.get("getup");
+                animation.play_with_clock(self.pos, self.state.1, Some(params.clone()));
+                if self.state.1 > animation.1 as f32 / 1000.0 {
                     self.state = (JetpackerState::Normal, 0.0)
                 }
             }
@@ -771,11 +791,9 @@ impl Enemy for Jetpacker {
                 } else {
                     false
                 };
-                ASSETS
-                    .jetpacker
-                    .hit
-                    .play_with_clock(self.pos, self.state.1, Some(params.clone()));
-                if self.state.1 > ASSETS.jetpacker.hit.1 as f32 / 1000.0 {
+                let animation = ASSETS.jetpacker.get("hit");
+                animation.play_with_clock(self.pos, self.state.1, Some(params.clone()));
+                if self.state.1 > animation.1 as f32 / 1000.0 {
                     self.state = (JetpackerState::Fall, 0.0)
                 }
             }
@@ -829,11 +847,10 @@ impl Enemy for Jetpacker {
                 }
             }
             JetpackerState::Lie => {
-                ASSETS
-                    .jetpacker
-                    .fall
-                    .play(self.pos + vec2(0.0, 4.0), Some(params.clone()));
-                if self.state.1 > ASSETS.jetpacker.fall.1 as f32 / 1000.0 {
+                let animation = ASSETS.jetpacker.get("fall");
+
+                animation.play(self.pos + vec2(0.0, 4.0), Some(params.clone()));
+                if self.state.1 > animation.1 as f32 / 1000.0 {
                     self.state = (JetpackerState::Getup, 0.0)
                 }
             }

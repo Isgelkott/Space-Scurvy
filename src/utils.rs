@@ -5,7 +5,7 @@ use macroquad::{
     miniquad::{BlendFactor, BlendState, BlendValue, Equation},
     prelude::*,
 };
-use std::sync::LazyLock;
+use std::{collections::HashMap, sync::LazyLock};
 pub fn load_ase_texture(bytes: &[u8], layer: Option<u32>, frame: Option<u32>) -> Texture2D {
     let img = AsepriteFile::read(bytes).unwrap();
     let frame = frame.unwrap_or(0);
@@ -39,7 +39,6 @@ pub fn to_map_pos(pos: Vec2, map_width: usize) -> usize {
     let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
     map_pos.y as usize * map_width as usize + map_pos.x as usize
 }
-
 pub fn load_animation_from_tag(data: &[u8], tag: &str) -> (Vec<(Texture2D, u32)>, u32) {
     let file = AsepriteFile::read(data).unwrap();
     dbg!(tag);
@@ -62,6 +61,33 @@ pub fn load_animation_from_tag(data: &[u8], tag: &str) -> (Vec<(Texture2D, u32)>
         frames.push((texture, time));
     }
     (frames, duration)
+}
+pub fn load_animation_group(data: &[u8]) -> AnimationGroup {
+    let file = AsepriteFile::read(data).unwrap();
+    let mut map = HashMap::new();
+    for i in 0..file.num_tags() {
+        let tag = file.get_tag(i).unwrap();
+        let start = tag.from_frame();
+        let end = tag.to_frame();
+
+        let mut frames = Vec::new();
+        let mut duration = 0;
+        for frame in start..=end {
+            let img = file.frame(frame);
+            let time = img.duration();
+            duration += time;
+            let img = img.image();
+            let texture = Texture2D::from_image(&Image {
+                width: img.width() as u16,
+                height: img.height() as u16,
+                bytes: img.as_bytes().to_vec(),
+            });
+            texture.set_filter(FilterMode::Nearest);
+            frames.push((texture, time));
+        }
+        map.insert(tag.name().to_string(), (frames, duration));
+    }
+    AnimationGroup(map)
 }
 pub fn load_animation(data: &[u8]) -> (Vec<(Texture2D, u32)>, u32) {
     let file = AsepriteFile::read(data).unwrap();
@@ -89,15 +115,7 @@ pub fn check_collision(pos: Vec2, map: &Level) -> bool {
     }
     let pottential_collider =
         &map.tiles[map_pos.y as usize * map.width as usize + map_pos.x as usize];
-    if pottential_collider
-        .data
-        .iter()
-        .any(|f| f.0 == Layer::Collision)
-    {
-        true
-    } else {
-        false
-    }
+    pottential_collider.collision
 }
 pub struct Spritesheet {
     spritesheet: Texture2D,
@@ -122,6 +140,57 @@ impl Spritesheet {
     }
 }
 pub type Animation = (Vec<(Texture2D, u32)>, u32);
+pub trait AnimationMethods {
+    fn play(&self, pos: Vec2, params: Option<DrawTextureParams>);
+    fn play_with_clock(&self, pos: Vec2, clock: f32, params: Option<DrawTextureParams>);
+    fn get_size(&self) -> Vec2;
+    fn get_duration(&self) -> f32;
+}
+impl AnimationMethods for Animation {
+    fn get_duration(&self) -> f32 {
+        self.1 as f32 / 1000.0
+    }
+    fn get_size(&self) -> Vec2 {
+        vec2(self.0[0].0.width(), self.0[0].0.height())
+    }
+    fn play(&self, pos: Vec2, params: Option<DrawTextureParams>) {
+        let mut time = (get_time() * 1000.0) % self.1 as f64;
+        for i in &self.0 {
+            if time <= i.1 as f64 {
+                draw_texture_ex(&i.0, pos.x, pos.y, WHITE, params.unwrap_or_default());
+                break;
+            } else {
+                time -= i.1 as f64;
+            }
+        }
+    }
+    fn play_with_clock(&self, pos: Vec2, clock: f32, params: Option<DrawTextureParams>) {
+        let mut frame = (clock * 1000.0) as u32;
+        for i in self.0.iter() {
+            if frame > i.1 {
+                frame -= i.1
+            } else {
+                draw_texture_ex(&i.0, pos.x, pos.y, WHITE, params.unwrap_or_default());
+
+                break;
+            }
+        }
+    }
+}
+#[derive(Debug)]
+pub struct AnimationGroup(pub HashMap<String, Animation>);
+impl AnimationGroup {
+    pub fn get(&self, key: &str) -> &Animation {
+        self.0.get(key).unwrap_or_else(|| {
+            dbg!(self, key);
+            panic!()
+        })
+    }
+    pub fn get_size(&self) -> Vec2 {
+        self.0.values().next().unwrap().get_size()
+    }
+}
+
 const DEFAULT_FRAGMENT_SHADER: &'static str = "#version 100
 precision lowp float;
 
@@ -317,53 +386,3 @@ gl_FragColor = vec4(0.0,0.0,0.0,0.0);
   
 }}
 ";
-pub trait AnimationMethods {
-    fn play(&self, pos: Vec2, params: Option<DrawTextureParams>);
-    fn play_with_clock(&self, pos: Vec2, clock: f32, params: Option<DrawTextureParams>);
-    fn play_with_time(&self, pos: Vec2, time: f32, params: Option<DrawTextureParams>);
-    fn get_size(&self) -> Vec2;
-    fn get_duration(&self) -> f32;
-}
-impl AnimationMethods for Animation {
-    fn get_duration(&self) -> f32 {
-        self.1 as f32 / 1000.0
-    }
-    fn get_size(&self) -> Vec2 {
-        vec2(self.0[0].0.width(), self.0[0].0.height())
-    }
-    fn play(&self, pos: Vec2, params: Option<DrawTextureParams>) {
-        let mut time = (get_time() * 1000.0) % self.1 as f64;
-        for i in &self.0 {
-            if time <= i.1 as f64 {
-                draw_texture_ex(&i.0, pos.x, pos.y, WHITE, params.unwrap_or_default());
-                break;
-            } else {
-                time -= i.1 as f64;
-            }
-        }
-    }
-    fn play_with_clock(&self, pos: Vec2, clock: f32, params: Option<DrawTextureParams>) {
-        let mut frame = (clock * 1000.0) as u32;
-        for i in self.0.iter() {
-            if frame > i.1 {
-                frame -= i.1
-            } else {
-                draw_texture_ex(&i.0, pos.x, pos.y, WHITE, params.unwrap_or_default());
-
-                break;
-            }
-        }
-    }
-    fn play_with_time(&self, pos: Vec2, time: f32, params: Option<DrawTextureParams>) {
-        let mut frame = ((get_time() - time as f64) * 1000.0) as u32;
-        for i in self.0.iter() {
-            if frame > i.1 {
-                frame -= i.1
-            } else {
-                draw_texture_ex(&i.0, pos.x, pos.y, WHITE, params.unwrap_or_default());
-
-                break;
-            }
-        }
-    }
-}

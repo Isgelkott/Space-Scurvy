@@ -1,3 +1,5 @@
+#![allow(unused_variables)]
+
 use enemies::*;
 use level::*;
 use macroquad::prelude::*;
@@ -21,6 +23,7 @@ const SCREEN_SIZE: (f32, f32) = (200.0, 200.0);
 
 pub struct Game {
     win: bool,
+    die: bool,
     scale_factor: f32,
     map: Level,
     backgrounds: Background,
@@ -31,7 +34,6 @@ pub struct Game {
     projectiles: Vec<Box<dyn Projectile>>,
     particles: Vec<Particle>,
     map_animations: Vec<MapAnimation>,
-    level_index: usize,
 }
 impl Game {
     fn draw_hud(&self) {
@@ -66,8 +68,7 @@ impl Game {
             enemies.push(enemy.0.spawn(enemy.1, &map))
         }
         Self {
-            level_index: 0,
-
+            die: false,
             win: false,
             pickups: special_data.pickups,
             backgrounds: Background::new(map.world_size),
@@ -100,7 +101,27 @@ impl Game {
             },
         );
     }
-
+    fn check_death(&mut self) {
+        if let Some(death) = self.player.death {
+            let animation = ASSETS.player.get(match death.0 {
+                DeathCause::Acid => "acid_death",
+                DeathCause::Energy => "energy_death",
+                DeathCause::Default => "default_death",
+            });
+            if death.1 > animation.get_duration() {
+                self.die = true;
+            } else {
+                animation.play_with_clock(
+                    self.player.pos,
+                    death.1,
+                    Some(DrawTextureParams {
+                        flip_x: self.player.previous_flipped,
+                        ..Default::default()
+                    }),
+                );
+            }
+        }
+    }
     async fn update(&mut self) {
         clear_background(BLACK);
         self.backgrounds.update();
@@ -115,7 +136,8 @@ impl Game {
             &mut self.particles,
             &mut self.enemies,
         );
-        if !self.win {
+        self.check_death();
+        if !self.win && !self.die {
             self.player.update(
                 &self.map,
                 &mut self.projectiles,
@@ -130,7 +152,6 @@ impl Game {
             &self.map,
             &mut self.projectiles,
         );
-        self.map.draw_foreground();
 
         update_particle_generators(&mut self.map.tiles, &mut self.particles);
         update_particles(&mut self.particles);
@@ -141,13 +162,13 @@ struct GameManger {
     game: Game,
     level_index: usize,
     levels: Vec<Levels>,
-    win_animation_clock: f32,
+    clock: f32,
 }
 impl GameManger {
     fn new() -> Self {
         let levels = vec![Levels::TestLevel];
         Self {
-            win_animation_clock: 0.0,
+            clock: 0.0,
             game: Game::new(levels[0]),
             levels: levels,
             level_index: 0,
@@ -155,75 +176,78 @@ impl GameManger {
     }
     async fn update(&mut self) {
         set_camera(&self.game.camera);
-        self.game.update().await;
-        let mut black_bars: bool = false;
+        if self.game.die {
+            dbg!("game die");
+            self.game = Game::new(self.levels[self.level_index]);
+        } else {
+            self.game.update().await;
+            let mut black_bars: bool = false;
 
-        let transition_length = 2.0;
-        if self.game.win {
-            let pos = vec2(
-                self.game.player.pos.x
-                    - if self.game.player.previous_flipped {
-                        (ASSETS.top_player_animations.idle.get_size().x
-                            + ASSETS.win_animation.get_size().x)
-                            / 2.0
-                    } else {
-                        0.0
-                    },
-                self.game.player.pos.y
-                    - (ASSETS.win_animation.get_size().y
-                        - ASSETS.top_player_animations.idle.get_size().y),
-            );
-            self.win_animation_clock += get_frame_time();
-            if self.win_animation_clock > ASSETS.win_animation.get_duration() + transition_length {
-                self.level_index += 1;
-                self.game = Game::new(self.levels[self.level_index]);
-            } else if self.win_animation_clock > ASSETS.win_animation.get_duration() {
-                draw_texture_ex(
-                    &ASSETS.win_animation.0.last().unwrap().0,
-                    pos.x,
-                    pos.y,
-                    WHITE,
-                    DrawTextureParams {
-                        flip_x: self.game.player.previous_flipped,
-                        ..Default::default()
-                    },
+            let transition_length = 2.0;
+            if self.game.win {
+                let pos = vec2(
+                    self.game.player.pos.x
+                        - if self.game.player.previous_flipped {
+                            (ASSETS.jetpacker.get("idle").get_size().x
+                                + ASSETS.win_animation.get_size().x)
+                                / 2.0
+                        } else {
+                            0.0
+                        },
+                    self.game.player.pos.y
+                        - (ASSETS.win_animation.get_size().y
+                            - ASSETS.jetpacker.get("idle").get_size().y),
                 );
-                black_bars = true;
-            } else {
-                ASSETS.win_animation.play_with_clock(
-                    vec2(pos.x, pos.y),
-                    self.win_animation_clock,
-                    Some(DrawTextureParams {
-                        flip_x: self.game.player.previous_flipped,
-                        ..Default::default()
-                    }),
+                self.clock += get_frame_time();
+                if self.clock > ASSETS.win_animation.get_duration() + transition_length {
+                    self.level_index += 1;
+                    self.game = Game::new(self.levels[self.level_index]);
+                } else if self.clock > ASSETS.win_animation.get_duration() {
+                    draw_texture_ex(
+                        &ASSETS.win_animation.0.last().unwrap().0,
+                        pos.x,
+                        pos.y,
+                        WHITE,
+                        DrawTextureParams {
+                            flip_x: self.game.player.previous_flipped,
+                            ..Default::default()
+                        },
+                    );
+                    black_bars = true;
+                } else {
+                    ASSETS.win_animation.play_with_clock(
+                        vec2(pos.x, pos.y),
+                        self.clock,
+                        Some(DrawTextureParams {
+                            flip_x: self.game.player.previous_flipped,
+                            ..Default::default()
+                        }),
+                    );
+                }
+            }
+            self.game.draw_camera();
+            if black_bars {
+                draw_rectangle(
+                    0.0,
+                    0.0,
+                    screen_width(),
+                    (self.clock - ASSETS.win_animation.get_duration()) / transition_length
+                        * screen_height()
+                        / 2.0,
+                    BLACK,
+                );
+                draw_rectangle(
+                    0.0,
+                    screen_height(),
+                    screen_width(),
+                    -(self.clock - ASSETS.win_animation.get_duration()) / transition_length
+                        * screen_height()
+                        / 2.0,
+                    BLACK,
                 );
             }
+            self.game.draw_hud();
         }
-        self.game.draw_camera();
-        if black_bars {
-            draw_rectangle(
-                0.0,
-                0.0,
-                screen_width(),
-                (self.win_animation_clock - ASSETS.win_animation.get_duration())
-                    / transition_length
-                    * screen_height()
-                    / 2.0,
-                BLACK,
-            );
-            draw_rectangle(
-                0.0,
-                screen_height(),
-                screen_width(),
-                -(self.win_animation_clock - ASSETS.win_animation.get_duration())
-                    / transition_length
-                    * screen_height()
-                    / 2.0,
-                BLACK,
-            );
-        }
-        self.game.draw_hud();
     }
 }
 #[macroquad::main("krusbar")]

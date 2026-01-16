@@ -3,6 +3,7 @@ use crate::{
     assets::ASSETS,
     enemies::{ENEMY_IDS, Enemy, PresetEnemies, check_collision_with_size},
     particles::ParticleGenerator,
+    player::DeathCause,
     utils::{Animation, AnimationMethods},
 };
 use macroquad::prelude::*;
@@ -36,12 +37,22 @@ impl Layer {
     }
 }
 #[derive(PartialEq)]
-pub enum TileData {
+pub enum VisualData {
     ID(usize),
     Animation(&'static Animation),
 }
+#[derive(PartialEq, Clone, Copy)]
+pub enum SpecialTileData {
+    Path,
+    Acid,
+}
+#[derive(Default)]
 pub struct Tile {
-    pub data: Vec<(Layer, TileData)>,
+    pub visual: Vec<VisualData>,
+    pub special_data: Vec<SpecialTileData>,
+    pub collision: bool,
+    pub one_way_collision: bool,
+    pub death_cause: Option<DeathCause>,
     pub particle_generator: Option<ParticleGenerator>,
 }
 
@@ -165,7 +176,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
 
             chunks.insert((x, y), data);
         }
-        layers.push((chunks, Layer::from_str(name)));
+        layers.push((chunks, Layer::Collision));
     }
     let layers_pos: Vec<(i32, i32, i32, i32)> = layers
         .iter()
@@ -190,16 +201,21 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
         dbg!(y);
         for x in area.0..area.2 {
             let mut tile = Tile {
-                data: vec![],
-                particle_generator: None,
+                ..Default::default()
             };
             for (chunks, layer) in layers.iter() {
-                if let Some(chunk) = chunks.get(&(((x / 16) * 16), ((y / 16) * 16))) {
+                if let Some(chunk) =
+                    chunks.get(&(((x / 16) * 16 * x.signum()), ((y / 16) * 16 * x.signum())))
+                {
                     let id = chunk[(y * 16 + x % 16).max(0) as usize] as usize;
 
                     let world_pos = vec2((x - area.0) as f32, (y - area.1) as f32) * TILE_SIZE;
                     if id != 0 {
                         match id {
+                            0..20 => {
+                                tile.collision = true;
+                                tile.visual.push(VisualData::ID(id));
+                            }
                             60..80 => {
                                 let map_animation = match id {
                                     62 => (20.0, &ASSETS.laughing_man),
@@ -210,9 +226,9 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                                     clock: 0.0,
                                     turn_off_value: 5.0,
                                     turn_on_value: 20.0,
-                                    inactive: &map_animation.1.0,
-                                    active: &map_animation.1.1,
-                                    turn_off: &map_animation.1.2,
+                                    inactive: ASSETS.laughing_man.get("inactive"),
+                                    active: ASSETS.laughing_man.get("active"),
+                                    turn_off: ASSETS.laughing_man.get("turn_off"),
                                 });
                             }
                             80..100 => match id {
@@ -221,7 +237,15 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                                         world_pos,
                                         crate::particles::ParticleType::Acid,
                                     ));
-                                    tile.data.push((*layer, TileData::Animation(&ASSETS.acid)));
+                                    tile.death_cause = Some(DeathCause::Acid);
+                                    tile.visual
+                                        .push(VisualData::Animation(&ASSETS.acid.get("surface")));
+                                }
+                                82 => {
+                                    tile.death_cause = Some(DeathCause::Acid);
+
+                                    tile.visual
+                                        .push(VisualData::Animation(&ASSETS.acid.get("inside")));
                                 }
                                 _ => panic!(),
                             },
@@ -238,9 +262,10 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                                 let enemy = *ENEMY_IDS.get(&id).unwrap();
                                 dbg!(enemy, world_pos, id);
                                 special_data.enemies.push((enemy, world_pos));
-                                let id = id - 1;
-                                tile.data.push((*layer, TileData::ID(id)));
+
+                                tile.visual.push(VisualData::ID(id));
                             }
+
                             221 => {
                                 special_data.spawn_location = world_pos;
                             }
@@ -257,8 +282,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                                 special_data.pickups.push(pickup);
                             }
                             _ => {
-                                let id = id - 1;
-                                tile.data.push((*layer, TileData::ID(id)));
+                                tile.visual.push(VisualData::ID(id));
                             }
                         }
                     }
@@ -362,13 +386,13 @@ impl Level {
             special_data,
         )
     }
-    fn draw(&self, tile_data: &TileData, index: usize) {
+    fn draw(&self, tile_data: &VisualData, index: usize) {
         let pos = vec2(
             (index % self.width) as f32 * TILE_SIZE,
             (index / self.width) as f32 * TILE_SIZE,
         );
         match tile_data {
-            TileData::Animation(animation) => {
+            VisualData::Animation(animation) => {
                 animation.play(
                     pos,
                     Some(DrawTextureParams {
@@ -377,7 +401,8 @@ impl Level {
                     }),
                 );
             }
-            TileData::ID(id) => {
+            VisualData::ID(id) => {
+                let id = id - 1;
                 ASSETS.spritesheet.draw_from(
                     (id % self.tileset_width, id / self.tileset_width),
                     pos,
@@ -391,10 +416,8 @@ impl Level {
     }
     pub fn draw_level(&self) {
         for (index, tile) in self.tiles.iter().enumerate() {
-            for (layer, tile_data) in tile.data.iter() {
-                if *layer != Layer::Path && *layer != Layer::OverPlayer {
-                    self.draw(tile_data, index);
-                }
+            for tile_data in tile.visual.iter() {
+                self.draw(tile_data, index);
             }
             draw_rectangle(-400.0, -400.0, self.world_size.x + 400.0, 400.0, BLACK);
             draw_rectangle(
@@ -404,15 +427,6 @@ impl Level {
                 400.0,
                 BLACK,
             );
-        }
-    }
-    pub fn draw_foreground(&self) {
-        for (index, tile) in self.tiles.iter().enumerate() {
-            for (layer, tile_data) in tile.data.iter() {
-                if *layer == Layer::OverPlayer {
-                    self.draw(tile_data, index);
-                }
-            }
         }
     }
 }
