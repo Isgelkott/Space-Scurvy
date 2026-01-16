@@ -193,13 +193,13 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
         layers_pos.iter().map(|f| f.3).max().unwrap(),
     );
     dbg!(area);
-    let width = area.2 - area.0;
+    let width = area.2 + 1 - area.0;
     let height = area.3 - area.1;
     let mut tiles: Vec<Tile> = Vec::with_capacity(((width) * (area.3 - area.1)) as usize);
 
     for y in area.1..=area.3 {
         dbg!(y);
-        for x in area.0..area.2 {
+        for x in area.0..area.2 + 1 {
             let mut tile = Tile {
                 ..Default::default()
             };
