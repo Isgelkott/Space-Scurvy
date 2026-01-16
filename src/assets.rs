@@ -32,11 +32,19 @@ pub struct Assets {
     pub lemon_pickup: Animation,
     pub win_animation: Animation,
     pub fish: AnimationGroup,
+    pub death_animations: AnimationGroup,
+    pub play_again: Texture2D,
 }
 
 impl Assets {
     fn new() -> Self {
         Self {
+            play_again: load_ase_texture(
+                include_bytes!("../assets/play_again.aseprite"),
+                None,
+                None,
+            ),
+            death_animations: load_animation_group(include_bytes!("../assets/deaths.aseprite")),
             acid: load_animation_group(include_bytes!("../assets/acid.aseprite")),
             laser: load_animation(include_bytes!("../assets/laser.aseprite")),
             laughing_man: load_animation_group(include_bytes!("../assets/talking_dude.aseprite")),

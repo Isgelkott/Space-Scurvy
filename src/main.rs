@@ -101,18 +101,30 @@ impl Game {
             },
         );
     }
-    fn check_death(&mut self) {
+    fn death(&mut self) {
         if let Some(death) = self.player.death {
-            let animation = ASSETS.player.get(match death.0 {
-                DeathCause::Acid => "acid_death",
-                DeathCause::Energy => "energy_death",
-                DeathCause::Default => "default_death",
+            draw_rectangle(
+                0.0,
+                0.0,
+                2000.0,
+                2000.0,
+                Color {
+                    r: 1.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.2,
+                },
+            );
+            let animation = ASSETS.death_animations.get(match death.0 {
+                DeathCause::Acid => "acid",
+                DeathCause::Energy => "energy",
+                DeathCause::Default => "default",
             });
             if death.1 > animation.get_duration() {
                 self.die = true;
             } else {
                 animation.play_with_clock(
-                    self.player.pos,
+                    self.player.pos - 8.,
                     death.1,
                     Some(DrawTextureParams {
                         flip_x: self.player.previous_flipped,
@@ -136,7 +148,6 @@ impl Game {
             &mut self.particles,
             &mut self.enemies,
         );
-        self.check_death();
         if !self.win && !self.die {
             self.player.update(
                 &self.map,
@@ -155,6 +166,7 @@ impl Game {
 
         update_particle_generators(&mut self.map.tiles, &mut self.particles);
         update_particles(&mut self.particles);
+        self.death();
     }
 }
 
@@ -174,11 +186,38 @@ impl GameManger {
             level_index: 0,
         }
     }
+    fn die_screen(&mut self) {
+        set_default_camera();
+        let button = &ASSETS.play_again;
+        let size = button.size() / 2.0
+            * (screen_width() / button.width()).min(screen_height() / button.height());
+        let pos = vec2(
+            (screen_width() - size.x) / 2.0,
+            (screen_height() - size.y) / 2.0,
+        );
+        draw_texture_ex(
+            button,
+            pos.x,
+            pos.y,
+            WHITE,
+            DrawTextureParams {
+                dest_size: Some(size),
+                ..Default::default()
+            },
+        );
+        if is_mouse_button_pressed(MouseButton::Left)
+            && mouse_position().0 > pos.x
+            && mouse_position().0 < pos.x + size.x
+            && mouse_position().1 > pos.y
+            && mouse_position().1 < pos.y + size.y
+        {
+            self.game = Game::new(self.levels[self.level_index]);
+        }
+    }
     async fn update(&mut self) {
         set_camera(&self.game.camera);
         if self.game.die {
-            dbg!("game die");
-            self.game = Game::new(self.levels[self.level_index]);
+            self.die_screen();
         } else {
             self.game.update().await;
             let mut black_bars: bool = false;

@@ -321,7 +321,7 @@ impl EnergyBall {
     fn new(pos: Vec2, direction: Vec2) -> Self {
         Self {
             animation: &ASSETS.energy_ball,
-            velocity: 40.0 * direction,
+            velocity: 80.0 * direction,
             pos,
             size: vec2(16.0, 16.0),
         }
@@ -340,7 +340,7 @@ impl Projectile for EnergyBall {
     fn particle(&self) -> Option<Particle> {
         Some(Particle::new(
             Box::new(|f| {
-                &ASSETS.energy_ball_shatter.play(f, None);
+                ASSETS.energy_ball_shatter.play(f, None);
             }),
             crate::particles::Lifetime::ByTime(ASSETS.energy_ball_shatter.1 as f32 / 1000.0),
             None,

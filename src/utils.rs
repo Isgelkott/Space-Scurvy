@@ -182,7 +182,7 @@ pub struct AnimationGroup(pub HashMap<String, Animation>);
 impl AnimationGroup {
     pub fn get(&self, key: &str) -> &Animation {
         self.0.get(key).unwrap_or_else(|| {
-            dbg!(self, key);
+            dbg!(key);
             panic!()
         })
     }
