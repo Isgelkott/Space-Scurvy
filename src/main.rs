@@ -167,7 +167,7 @@ impl Game {
                 &mut self.particles,
             );
         }
-        self.camera.target = self.player.pos - vec2(0.0, 10.0);
+        self.camera.target = self.player.pos - vec2(0.0, 20.0);
 
         update_pickups(self);
         update_enemies(
