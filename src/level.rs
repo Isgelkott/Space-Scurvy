@@ -266,7 +266,11 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
 
                                 tile.visual.push(VisualData::ID(id));
                             }
-
+                            200..220 => {
+                                // one way collision
+                                tile.one_way_collision = true;
+                                tile.visual.push(VisualData::ID(id));
+                            }
                             221 => {
                                 special_data.spawn_location = world_pos;
                             }
