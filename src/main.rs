@@ -146,7 +146,7 @@ impl Game {
         clear_background(BLACK);
         self.backgrounds.update();
         if let Some(boss) = &mut self.boss {
-            boss.update();
+            boss.update(&self.map, &mut self.enemies);
         }
         self.map.draw_level();
         update_map_animations(&mut self.map_animations);

@@ -4,7 +4,7 @@ use macroquad::{prelude::*, rand::gen_range};
 
 use crate::{
     assets::ASSETS,
-    enemies::{Enemy, PresetEnemies},
+    enemies::{self, Enemy, PresetEnemies},
     level::{self, Level, TILE_SIZE},
     utils::{AnimationMethods, load_pixel_map, to_game_pos, to_world_pos},
 };
@@ -22,9 +22,9 @@ pub trait Boss {
     fn new(tile: usize, level: &Level) -> Box<dyn Boss>
     where
         Self: Sized;
-    fn update(&mut self);
+    fn update(&mut self, map: &Level, enemies: &mut Vec<Box<dyn Enemy>>);
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 enum RedGuyPhase {
     ThrowEnemies,
     ShootRockets,
@@ -34,22 +34,26 @@ enum RedGuyPhase {
     Shoot(PresetEnemies),
     Entry,
 }
-
+const HOVER_RANGE: (f32, f32) = (40.0, 20.0);
 struct RedGuy {
     pos: Vec2,
     crane: Vec<(f32, Vec2)>,
     catapult: Vec<(f32, Vec2)>,
     allowed_area: (Vec2, Vec2),
     actions: Vec<(RedGuyPhase, f32)>,
+    attack_cooldowns: Vec<(RedGuyPhase, f32)>,
 }
 impl RedGuy {
     fn new_location(allowed_area: (Vec2, Vec2)) -> Vec2 {
         vec2(
             gen_range(
-                allowed_area.0.x,
-                allowed_area.1.x - ASSETS.red_boss.get_size().x,
+                allowed_area.0.x + HOVER_RANGE.0,
+                allowed_area.1.x - 2.0 * ASSETS.red_boss.get_size().x - HOVER_RANGE.0,
             ),
-            gen_range(allowed_area.1.y - 150.0, allowed_area.1.y - 20.0),
+            gen_range(
+                allowed_area.0.y + HOVER_RANGE.1,
+                allowed_area.1.y - ASSETS.red_boss.get_size().y * 2.0 - HOVER_RANGE.1,
+            ),
         )
     }
     fn rand_enemy() -> PresetEnemies {
@@ -83,6 +87,15 @@ impl RedGuy {
         }
         dbg!(&points);
         points
+    }
+    fn attack(&mut self) {
+        let attacks = [RedGuyPhase::Load((RedGuy::rand_enemy()))];
+        let attack = attacks[gen_range(0, attacks.len())];
+        if let Some(cooldown) = self.actions.iter().find(|f| f.0 == attack) {
+            if cooldown.1 < 0.0 {
+                self.actions.push((attack, 0.0));
+            }
+        }
     }
 }
 impl Boss for RedGuy {
@@ -123,9 +136,10 @@ impl Boss for RedGuy {
         }
 
         Box::new(Self {
+            attack_cooldowns: Vec::new(),
             catapult: load_pixel_map(&ASSETS.red_boss.get("catapult"), [61, 61, 61, 255]),
             crane: Self::get_crane(),
-            actions: vec![(RedGuyPhase::Load(Self::rand_enemy()), 0.0)],
+            actions: vec![(RedGuyPhase::Entry, (0.0))],
             pos: to_game_pos(tile, level),
 
             allowed_area: (
@@ -135,7 +149,7 @@ impl Boss for RedGuy {
         })
     }
 
-    fn update(&mut self) {
+    fn update(&mut self, map: &Level, enemies: &mut Vec<Box<dyn Enemy>>) {
         let params = DrawTextureParams {
             dest_size: Some(ASSETS.red_boss.get_size() * 2.0),
             ..Default::default()
@@ -150,12 +164,15 @@ impl Boss for RedGuy {
         // let mut animations = Vec::new();
         let mut new_actions = Vec::new();
         if is_key_down(KeyCode::F) {}
-
+        for cooldown in &mut self.attack_cooldowns {
+            cooldown.1 -= get_frame_time();
+        }
         self.actions.retain_mut(|f| {
             f.1 += get_frame_time();
             match f.0 {
                 RedGuyPhase::Idle(point, duration) => {
-                    self.pos = point + vec2(40.0 * f.1.sin(), 20.0 * f.1.cos());
+                    self.pos = point + vec2(HOVER_RANGE.0 * f.1.sin(), HOVER_RANGE.1 * f.1.cos());
+
                     if f.1 > duration {
                         return false;
                     }
@@ -246,8 +263,9 @@ impl Boss for RedGuy {
                 }
                 RedGuyPhase::Shoot(enemy) => {
                     let duration = self.catapult.iter().map(|f| f.0).sum::<f32>();
+
                     let mut time = f.1;
-                    let mut catapult_pos = Vec2::ZERO;
+                    let mut catapult_pos = self.catapult.last().unwrap().1;
                     for (index, p) in self.catapult.iter().enumerate() {
                         if time < p.0 {
                             catapult_pos = p.1;
@@ -262,11 +280,20 @@ impl Boss for RedGuy {
                         Some(params.clone()),
                     );
                     let text = enemy.default_texture();
-                    let size = text.size() / 2.0 + (f.1 / duration) * text.size() / 2.0;
-                    draw_texture_ex(
-                        text,
+                    let size = text.size() / 1.5 + ((f.1 / duration) * text.size() / 2.0) / 2.0;
+                    let pos = vec2(
                         self.pos.x + catapult_pos.x * 2.0 - size.x / 2.0 + 2.0,
                         self.pos.y + catapult_pos.y * 2.0 - size.y / 2.0,
+                    );
+                    if f.1 > duration {
+                        enemies.push(enemy.spawn(pos, map));
+                        dbg!("spawn enemy at ", pos, (self.pos, catapult_pos * 2.0));
+                        return false;
+                    }
+                    draw_texture_ex(
+                        text,
+                        pos.x,
+                        pos.y,
                         WHITE,
                         DrawTextureParams {
                             dest_size: Some(vec2(text.width(), text.height())),

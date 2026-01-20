@@ -24,7 +24,7 @@ pub static ENEMY_IDS: LazyLock<HashMap<usize, PresetEnemies>> = LazyLock::new(||
         (161, PresetEnemies::BombChain),
     ])
 });
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum PresetEnemies {
     Jetpacker,
     SpikeBall,
@@ -512,7 +512,7 @@ impl Enemy for FireWagon {
                 .play(self.pos, params.clone());
             self.size = vec2(11.0, 15.0)
         }
-        ASSETS.fire_wagon.get("wheel").play(self.pos, params);
+        ASSETS.fire_wagon.get("drive").play(self.pos, params);
         self.pos += self.direction * self.speed * get_frame_time();
     }
 }
