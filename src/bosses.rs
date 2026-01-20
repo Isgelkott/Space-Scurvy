@@ -88,15 +88,6 @@ impl RedGuy {
         dbg!(&points);
         points
     }
-    fn attack(&mut self) {
-        let attacks = [RedGuyPhase::Load((RedGuy::rand_enemy()))];
-        let attack = attacks[gen_range(0, attacks.len())];
-        if let Some(cooldown) = self.actions.iter().find(|f| f.0 == attack) {
-            if cooldown.1 < 0.0 {
-                self.actions.push((attack, 0.0));
-            }
-        }
-    }
 }
 impl Boss for RedGuy {
     fn new(tile: usize, level: &Level) -> Box<dyn Boss> {
@@ -154,28 +145,41 @@ impl Boss for RedGuy {
             dest_size: Some(ASSETS.red_boss.get_size() * 2.0),
             ..Default::default()
         };
+        let draw_pos = self.pos;
         let draw_first = ["sack", "idle"];
         for animation in draw_first {
             ASSETS
                 .red_boss
                 .get(animation)
-                .play(self.pos, Some(params.clone()));
+                .play(draw_pos, Some(params.clone()));
         }
         // let mut animations = Vec::new();
         let mut new_actions = Vec::new();
         if is_key_down(KeyCode::F) {}
-        for cooldown in &mut self.attack_cooldowns {
-            cooldown.1 -= get_frame_time();
-        }
+        self.attack_cooldowns.retain_mut(|f| {
+            if f.1 < 0.0 {
+                return false;
+            } else {
+                f.1 -= get_frame_time();
+                true
+            }
+        });
+
         self.actions.retain_mut(|f| {
             f.1 += get_frame_time();
             match f.0 {
                 RedGuyPhase::Idle(point, duration) => {
                     self.pos = point + vec2(HOVER_RANGE.0 * f.1.sin(), HOVER_RANGE.1 * f.1.cos());
-
-                    if f.1 > duration {
-                        return false;
+                    let attacks = [RedGuyPhase::Load(RedGuy::rand_enemy())];
+                    let attack = attacks[gen_range(0, attacks.len())];
+                    if !self.attack_cooldowns.iter().any(|f| f.0 == attack) {
+                        new_actions.push((attack, 0.0));
+                        self.attack_cooldowns.push((attack, gen_range(5.0, 8.0)));
                     }
+
+                    // if f.1 > duration {
+                    //     return false;
+                    // }
                 }
                 RedGuyPhase::Entry => {
                     if f.1 > 1.0 {
@@ -310,7 +314,7 @@ impl Boss for RedGuy {
             ASSETS
                 .red_boss
                 .get(animation)
-                .play(self.pos, Some(params.clone()));
+                .play(draw_pos, Some(params.clone()));
         }
 
         self.actions.append(&mut new_actions);
