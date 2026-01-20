@@ -34,11 +34,13 @@ pub struct Assets {
     pub fish: AnimationGroup,
     pub death_animations: AnimationGroup,
     pub play_again: Texture2D,
+    pub red_boss: AnimationGroup,
 }
 
 impl Assets {
     fn new() -> Self {
         Self {
+            red_boss: load_animation_group(include_bytes!("../assets/boss1.aseprite")),
             play_again: load_ase_texture(
                 include_bytes!("../assets/play_again.aseprite"),
                 None,

@@ -35,9 +35,37 @@ pub fn create_camera(dimensions: Vec2) -> Camera2D {
         ..Default::default()
     }
 }
-pub fn to_map_pos(pos: Vec2, map_width: usize) -> usize {
+pub fn to_world_pos(pos: Vec2, map_width: usize) -> usize {
     let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
     map_pos.y as usize * map_width as usize + map_pos.x as usize
+}
+pub fn to_game_pos(pos: usize, level: &Level) -> Vec2 {
+    vec2(
+        (pos % level.width) as f32 * TILE_SIZE,
+        (pos / level.width) as f32 * TILE_SIZE,
+    )
+}
+pub struct Spritesheet {
+    spritesheet: Texture2D,
+    size: (f32, f32),
+}
+impl Spritesheet {
+    pub fn draw_from(&self, coord: (usize, usize), pos: Vec2, params: Option<DrawTextureParams>) {
+        let mut params = params.unwrap_or_default();
+        params.source = Some(Rect {
+            x: coord.0 as f32 * self.size.0,
+            y: coord.1 as f32 * self.size.1,
+            w: self.size.0,
+            h: self.size.1,
+        });
+        draw_texture_ex(&self.spritesheet, pos.x, pos.y, WHITE, params);
+    }
+    pub fn new(size: (f32, f32), texture: Texture2D) -> Self {
+        Self {
+            spritesheet: texture,
+            size,
+        }
+    }
 }
 pub fn load_animation_from_tag(data: &[u8], tag: &str) -> (Vec<(Texture2D, u32)>, u32) {
     let file = AsepriteFile::read(data).unwrap();
@@ -61,6 +89,32 @@ pub fn load_animation_from_tag(data: &[u8], tag: &str) -> (Vec<(Texture2D, u32)>
         frames.push((texture, time));
     }
     (frames, duration)
+}
+pub fn load_pixel_map(animation: &Animation, color: [u8; 4]) -> Vec<(f32, Vec2)> {
+    let mut data = Vec::new();
+    for (frame, duiration) in animation.0.iter() {
+        let width = frame.width();
+        let heigt = frame.height();
+        for (index, pixels) in frame
+            .get_texture_data()
+            .bytes
+            .windows(4)
+            .step_by(4)
+            .enumerate()
+        {
+            if pixels == &color {
+                data.push((
+                    *duiration as f32 / 1000.0,
+                    vec2(
+                        (index % width as usize) as f32,
+                        (index / width as usize) as f32,
+                    ),
+                ));
+            }
+        }
+    }
+
+    data
 }
 pub fn load_animation_group(data: &[u8]) -> AnimationGroup {
     let file = AsepriteFile::read(data).unwrap();
@@ -117,27 +171,38 @@ pub fn check_collision(pos: Vec2, map: &Level) -> bool {
         &map.tiles[map_pos.y as usize * map.width as usize + map_pos.x as usize];
     pottential_collider.collision
 }
-pub struct Spritesheet {
-    spritesheet: Texture2D,
-    size: (f32, f32),
-}
-impl Spritesheet {
-    pub fn draw_from(&self, coord: (usize, usize), pos: Vec2, params: Option<DrawTextureParams>) {
-        let mut params = params.unwrap_or_default();
-        params.source = Some(Rect {
-            x: coord.0 as f32 * self.size.0,
-            y: coord.1 as f32 * self.size.1,
-            w: self.size.0,
-            h: self.size.1,
-        });
-        draw_texture_ex(&self.spritesheet, pos.x, pos.y, WHITE, params);
-    }
-    pub fn new(size: (f32, f32), texture: Texture2D) -> Self {
-        Self {
-            spritesheet: texture,
-            size,
+
+pub fn load_animation_by_layer(data: &[u8]) -> AnimationGroup {
+    let file = AsepriteFile::read(data).unwrap();
+    let mut layers: HashMap<String, (Vec<(Texture2D, u32)>, u32)> = HashMap::new();
+    for i in 0..file.num_layers() {
+        let mut frames = Vec::new();
+        let mut duration = 0;
+        let name = file.layer(i).name().to_string();
+        let mut counter = 0;
+        loop {
+            if counter >= file.num_frames() {
+                break;
+            }
+            if file.layer(i).frame(counter).is_empty() {
+                break;
+            }
+            let img = file.frame(counter);
+            let time = img.duration();
+            duration += time;
+            let img = img.layer(i).image();
+            let texture = Texture2D::from_image(&Image {
+                width: img.width() as u16,
+                height: img.height() as u16,
+                bytes: img.as_bytes().to_vec(),
+            });
+            texture.set_filter(FilterMode::Nearest);
+            frames.push((texture, time));
+            counter += 1;
         }
+        layers.insert(name, (frames, duration));
     }
+    AnimationGroup(layers)
 }
 pub type Animation = (Vec<(Texture2D, u32)>, u32);
 pub trait AnimationMethods {
@@ -180,6 +245,9 @@ impl AnimationMethods for Animation {
 #[derive(Debug)]
 pub struct AnimationGroup(pub HashMap<String, Animation>);
 impl AnimationGroup {
+    pub fn default(&self) -> &Texture2D {
+        &self.get("ref").0[0].0
+    }
     pub fn get(&self, key: &str) -> &Animation {
         self.0.get(key).unwrap_or_else(|| {
             dbg!(key);

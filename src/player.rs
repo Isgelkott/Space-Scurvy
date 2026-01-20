@@ -230,7 +230,6 @@ impl Player {
 
             bot_animation.play(self.pos, Some(params.clone()));
             if self.velocity.x.abs() < 2. {
-                println!("wa");
                 self.velocity.x = 0.0
             }
             if self.velocity.y.abs() < 2. {

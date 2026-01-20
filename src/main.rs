@@ -9,17 +9,19 @@ use utils::*;
 use crate::{
     assets::ASSETS,
     background::Background,
+    bosses::Boss,
     particles::{Particle, update_particle_generators, update_particles},
 };
 mod assets;
 mod background;
+mod bosses;
 mod enemies;
 mod level;
 mod particles;
 mod player;
 mod utils;
 
-const SCREEN_SIZE: (f32, f32) = (200.0, 200.0);
+const SCREEN_SIZE: (f32, f32) = (250.0, 250.0);
 
 pub struct Game {
     win: bool,
@@ -30,6 +32,7 @@ pub struct Game {
     player: Player,
     camera: Camera2D,
     enemies: Vec<Box<dyn Enemy>>,
+    boss: Option<Box<dyn Boss>>,
     pickups: Vec<Pickup>,
     projectiles: Vec<Box<dyn Projectile>>,
     particles: Vec<Particle>,
@@ -68,6 +71,11 @@ impl Game {
             enemies.push(enemy.0.spawn(enemy.1, &map))
         }
         Self {
+            boss: if let Some((boss, tile)) = special_data.boss {
+                Some(boss.to_boss(tile, &map))
+            } else {
+                None
+            },
             die: false,
             win: false,
             pickups: special_data.pickups,
@@ -137,10 +145,12 @@ impl Game {
     async fn update(&mut self) {
         clear_background(BLACK);
         self.backgrounds.update();
+        if let Some(boss) = &mut self.boss {
+            boss.update();
+        }
         self.map.draw_level();
         update_map_animations(&mut self.map_animations);
 
-        self.camera.target = self.player.pos - vec2(0.0, 10.0);
         update_projectiles(
             &mut self.player,
             &self.map,
@@ -148,6 +158,7 @@ impl Game {
             &mut self.particles,
             &mut self.enemies,
         );
+
         if !self.win && !self.die {
             self.player.update(
                 &self.map,
@@ -156,6 +167,8 @@ impl Game {
                 &mut self.particles,
             );
         }
+        self.camera.target = self.player.pos - vec2(0.0, 10.0);
+
         update_pickups(self);
         update_enemies(
             &self.player,

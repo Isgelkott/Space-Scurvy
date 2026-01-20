@@ -1,6 +1,7 @@
 use crate::{
     Game,
     assets::ASSETS,
+    bosses::Bosses,
     enemies::{ENEMY_IDS, Enemy, PresetEnemies, check_collision_with_size},
     particles::ParticleGenerator,
     player::DeathCause,
@@ -196,13 +197,13 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
     let width = area.2 + 1 - area.0;
     let height = area.3 - area.1;
     let mut tiles: Vec<Tile> = Vec::with_capacity(((width) * (area.3 - area.1)) as usize);
-
+    let mut tile_index: usize = 0;
     for y in area.1..=area.3 {
-        dbg!(y);
         for x in area.0..area.2 + 1 {
             let mut tile = Tile {
                 ..Default::default()
             };
+            tile_index += 1;
             for (chunks, layer) in layers.iter() {
                 if let Some(chunk) =
                     chunks.get(&(((x / 16) * 16 * x.signum()), ((y / 16) * 16 * x.signum())))
@@ -280,6 +281,13 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                                     _ => panic!(),
                                 };
                                 special_data.pickups.push(pickup);
+                            }
+                            360..380 => {
+                                let boss = match id {
+                                    361 => Bosses::RedGuy,
+                                    _ => unreachable!(),
+                                };
+                                special_data.boss = Some((boss, tile_index));
                             }
                             _ => {
                                 tile.visual.push(VisualData::ID(id));
@@ -359,6 +367,7 @@ pub fn update_pickups(game: &mut Game) {
 pub struct SpecialData {
     pub spawn_location: Vec2,
     pub enemies: Vec<(PresetEnemies, Vec2)>,
+    pub boss: Option<(Bosses, usize)>,
     pub map_animations: Vec<MapAnimation>,
     pub pickups: Vec<Pickup>,
 }

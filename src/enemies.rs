@@ -11,7 +11,7 @@ use crate::{
     player::{self, DeathCause, Player},
     utils::{
         Animation, AnimationGroup, AnimationMethods, BULLET_MATERIAL, FISH_MATERIAL,
-        check_collision, to_map_pos,
+        check_collision, to_world_pos,
     },
 };
 pub static ENEMY_IDS: LazyLock<HashMap<usize, PresetEnemies>> = LazyLock::new(|| {
@@ -42,6 +42,13 @@ impl PresetEnemies {
             Self::FireWagon => FireWagon::spawn(pos, map),
             Self::BombChain => BombChain::spawn(pos + TILE_SIZE / 2.0, map),
             Self::Fish => Fish::spawn(pos, map),
+        }
+    }
+    pub fn default_texture(&self) -> &Texture2D {
+        match &self {
+            Self::Jetpacker => ASSETS.jetpacker.default(),
+            Self::FireWagon => ASSETS.fire_wagon.default(),
+            _ => panic!(),
         }
     }
 }
@@ -152,7 +159,7 @@ impl Enemy for Fish {
     where
         Self: Sized,
     {
-        let mut start_x = to_map_pos(pos, map.width);
+        let mut start_x = to_world_pos(pos, map.width);
         let mut end_x = start_x;
 
         while map.tiles[start_x]
@@ -223,7 +230,7 @@ impl Enemy for Fish {
             }
         } else {
             'wa: {
-                let tile = to_map_pos(
+                let tile = to_world_pos(
                     vec2(
                         self.pos.x
                             + self.direction * get_frame_time()

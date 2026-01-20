@@ -241,7 +241,6 @@ impl Background {
             }
             let chunk = &mut self.spawn_chunks[rand];
             if *chunk <= 0.0 {
-                dbg!(rand);
                 *chunk = 10.0;
                 self.objects.push(BackgroundObject::new(
                     vec2(
