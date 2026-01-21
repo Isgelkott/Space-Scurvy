@@ -47,6 +47,23 @@ pub enum SpecialTileData {
     Path,
     Acid,
 }
+pub enum TriggerBehaviour {
+    PlayAnimationOnce(&'static Animation),
+}
+pub struct MapAnimation {
+    clock: f32,
+    animation: &'static Animation,
+    pos: Vec2,
+}
+impl MapAnimation {
+    pub fn new(pos: Vec2, animation: &'static Animation) -> Self {
+        Self {
+            clock: 0.0,
+            animation,
+            pos,
+        }
+    }
+}
 #[derive(Default)]
 pub struct Tile {
     pub visual: Vec<VisualData>,
@@ -55,8 +72,19 @@ pub struct Tile {
     pub one_way_collision: bool,
     pub death_cause: Option<DeathCause>,
     pub particle_generator: Option<ParticleGenerator>,
+    pub trigger: Option<bool>,
+    pub trigger_behaviour: Option<TriggerBehaviour>,
 }
-
+impl Tile {
+    fn trigger(&mut self, pos: Vec2, map_animations: &mut Vec<MapAnimation>) {
+        let trigger_behaviour = self.trigger_behaviour.as_ref().unwrap();
+        match trigger_behaviour {
+            TriggerBehaviour::PlayAnimationOnce(animation) => {
+                map_animations.push(MapAnimation::new(pos, animation));
+            }
+        }
+    }
+}
 pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), SpecialData, usize) {
     let mut special_data = SpecialData::default();
     let tile_set_width = tileset
@@ -165,14 +193,8 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                 } else {
                     id
                 };
-
-                data[index] = id.parse::<u16>().unwrap();
-            }
-            if data.iter().all(|f| *f == 0) {
-                println!("chunk x: {},y: {} is empty ", x, y);
-                continue;
-            } else {
-                println!("chunk is full of juice x: {}y:{}", x, y)
+                let id = id.parse::<u16>().unwrap();
+                data[index] = id;
             }
 
             chunks.insert((x, y), data);
@@ -205,10 +227,13 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
             };
             tile_index += 1;
             for (chunks, layer) in layers.iter() {
-                if let Some(chunk) =
-                    chunks.get(&(((x / 16) * 16 * x.signum()), ((y / 16) * 16 * x.signum())))
-                {
-                    let id = chunk[(y * 16 + x % 16).max(0) as usize] as usize;
+                let chunk_pos = &(
+                    ((x as f32 / 16.0).floor() as i32 * 16),
+                    ((y as f32 / 16.).floor() as i32 * 16),
+                );
+
+                if let Some(chunk) = chunks.get(chunk_pos) {
+                    let id = chunk[((y.abs() % 16) * 16 + x.abs() % 16) as usize] as usize;
 
                     let world_pos = vec2((x - area.0) as f32, (y - area.1) as f32) * TILE_SIZE;
                     if id != 0 {
@@ -222,15 +247,15 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                                     62 => (20.0, &ASSETS.laughing_man),
                                     _ => unreachable!(),
                                 };
-                                special_data.map_animations.push(MapAnimation {
-                                    pos: world_pos,
-                                    clock: 0.0,
-                                    turn_off_value: 5.0,
-                                    turn_on_value: 20.0,
-                                    inactive: ASSETS.laughing_man.get("inactive"),
-                                    active: ASSETS.laughing_man.get("active"),
-                                    turn_off: ASSETS.laughing_man.get("turn_off"),
-                                });
+                                // special_data.map_animations.push(MapAnimation {
+                                //     pos: world_pos,
+                                //     clock: 0.0,
+                                //     turn_off_value: 5.0,
+                                //     turn_on_value: 20.0,
+                                //     inactive: ASSETS.laughing_man.get("inactive"),
+                                //     active: ASSETS.laughing_man.get("active"),
+                                //     turn_off: ASSETS.laughing_man.get("turn_off"),
+                                // });
                             }
                             80..100 => match id {
                                 81 => {
@@ -274,6 +299,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                             221 => {
                                 special_data.spawn_location = world_pos;
                             }
+                            241 => tile.trigger = Some(false),
                             340..360 => {
                                 let pickup = match id {
                                     341 => Pickup {
@@ -310,35 +336,40 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
 pub enum Levels {
     TestLevel,
 }
-pub struct MapAnimation {
-    pos: Vec2,
-    clock: f32,
-    turn_off_value: f32,
-    turn_on_value: f32,
-    inactive: &'static Animation,
-    active: &'static Animation,
-    turn_off: &'static Animation,
-}
-impl MapAnimation {
-    fn update(&mut self) {
-        self.clock += get_frame_time();
-        if self.clock > self.turn_on_value {
-            self.clock = 0.0;
-            self.inactive.play(self.pos, None);
-        } else if self.clock > self.turn_off_value + self.turn_off.1 as f32 / 1000.0 {
-            self.inactive.play(self.pos, None);
-        } else if self.clock > self.turn_off_value {
-            self.turn_off
-                .play_with_clock(self.pos, self.clock - self.turn_off_value, None);
-        } else {
-            self.active.play(self.pos, None);
-        }
-    }
-}
+// pub struct MapAnimation {
+//     pos: Vec2,
+//     clock: f32,
+//     turn_off_value: f32,
+//     turn_on_value: f32,
+//     inactive: &'static Animation,
+//     active: &'static Animation,
+//     turn_off: &'static Animation,
+// }
+// impl MapAnimation {
+//     fn update(&mut self) {
+//         self.clock += get_frame_time();
+//         if self.clock > self.turn_on_value {
+//             self.clock = 0.0;
+//             self.inactive.play(self.pos, None);
+//         } else if self.clock > self.turn_off_value + self.turn_off.1 as f32 / 1000.0 {
+//             self.inactive.play(self.pos, None);
+//         } else if self.clock > self.turn_off_value {
+//             self.turn_off
+//                 .play_with_clock(self.pos, self.clock - self.turn_off_value, None);
+//         } else {
+//             self.active.play(self.pos, None);
+//         }
+//     }
+// }
 pub fn update_map_animations(animations: &mut Vec<MapAnimation>) {
-    for animation in animations.iter_mut() {
-        animation.update();
-    }
+    animations.retain_mut(|f| {
+        if f.clock > f.animation.get_duration() {
+            return false;
+        } else {
+            f.animation.play_with_clock(f.pos, f.clock, None);
+            return true;
+        }
+    });
 }
 #[derive(PartialEq)]
 enum PickupEffects {

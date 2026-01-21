@@ -53,15 +53,16 @@ impl PresetEnemies {
     }
 }
 fn check_player_collision(pos: Vec2, size: Vec2, player: &Player) -> bool {
-    if pos.x <= player.pos.x + player.size.x
-        && pos.x + size.x >= player.pos.x
-        && pos.y >= player.pos.y
-        && player.size.y + player.pos.y >= pos.y + size.y
-    {
-        true
-    } else {
-        false
-    }
+    let points = [(0.0, 0.0), (size.x, 0.0), (0.0, size.y), (size.x, size.y)];
+
+    points.iter().any(|f| {
+        let x = pos.x + f.0;
+        let y = pos.y + f.1;
+        x <= player.pos.x + player.size.x
+            && x >= player.pos.x
+            && y >= player.pos.y
+            && player.size.y + player.pos.y >= y
+    })
 }
 fn check_map_collision(pos: Vec2, size: Vec2, map: &Level) -> bool {
     let points = [
@@ -380,6 +381,10 @@ impl Projectile for EnergyBall {
         }
     }
 }
+pub enum Projectiles {
+    Rocket,
+    EnergyBall,
+}
 pub enum ProjectileBehaviour {
     FollowPlayer,
 }
@@ -388,28 +393,80 @@ pub struct StandardProjectile {
     pub size: Vec2,
     pub direction: Vec2,
     pub speed: f32,
-    pub draw: Box<dyn Fn(Vec2, f32)>,
+    pub draw: Box<dyn Fn(Vec2, Vec2, f32)>,
     pub behaviour: Option<ProjectileBehaviour>,
     pub damage: u32,
     pub death_cause: DeathCause,
+    pub particle: Option<Particle>,
 }
-impl StandardProjectile {}
+impl StandardProjectile {
+    fn spawn(pos: Vec2, projectile: Projectiles, direction: Option<Vec2>) -> Self {
+        let direction = direction.unwrap_or(Vec2::ZERO);
+        match projectile {
+            Projectiles::Rocket => StandardProjectile {
+                particle: None,
+                behaviour: Some(enemies::ProjectileBehaviour::FollowPlayer),
+                pos: pos,
+                size: ASSETS.rocket.get_size(),
+                damage: 200,
+                direction: Vec2::ZERO,
+                speed: 40.0,
+                draw: Box::new(|pos, size, rotation| {
+                    ASSETS.rocket.get("fly").play(
+                        pos,
+                        Some(DrawTextureParams {
+                            rotation,
+                            pivot: Some(pos + size / 2.0),
+                            ..Default::default()
+                        }),
+                    )
+                }),
+                death_cause: DeathCause::Acid,
+            },
+            Projectiles::EnergyBall => Self {
+                pos,
+                size: ASSETS.energy_ball.get_size(),
+                damage: 20,
+                draw: Box::new(|pos, size, rotation| {
+                    ASSETS.energy_ball.play(pos, None);
+                }),
+                speed: 40.0,
+                direction,
+                behaviour: Some(ProjectileBehaviour::FollowPlayer),
+                death_cause: DeathCause::Energy,
+                particle: Some(Particle::new(
+                    Box::new(|f| {
+                        ASSETS.energy_ball_shatter.play(f, None);
+                    }),
+                    crate::particles::Lifetime::ByTime(
+                        ASSETS.energy_ball_shatter.1 as f32 / 1000.0,
+                    ),
+                    None,
+                    pos,
+                )),
+            },
+        }
+    }
+}
 impl Projectile for StandardProjectile {
     fn on_player_impact(&self, player: &mut Player) -> bool {
         player.damage(Some(self.damage), self.death_cause);
         return true;
     }
+
     fn update(&mut self, player: &mut Player, _map: &Level) {
         if let Some(behavoiour) = &self.behaviour {
             match behavoiour {
                 ProjectileBehaviour::FollowPlayer => {
-                    self.direction += (player.pos - self.pos).normalize();
+                    self.direction += ((player.pos + player.size / 2.0)
+                        - (self.pos + self.size / 2.0))
+                        .normalize();
                 }
             }
         }
         self.pos += self.direction.normalize_or_zero() * self.speed * get_frame_time();
 
-        (self.draw)(self.pos, self.direction.to_angle());
+        (self.draw)(self.pos, self.size, self.direction.to_angle());
     }
     fn collision<'a>(
         &self,
@@ -615,6 +672,7 @@ impl Enemy for MachineGunner {
             self.flipped = player.pos.x > self.pos.x;
             if self.shoot_clock >= 0.4 {
                 projectiles.push(Box::new(StandardProjectile {
+                    particle: None,
                     behaviour: Some(ProjectileBehaviour::FollowPlayer),
                     pos: self.pos
                         + if self.flipped {
@@ -629,7 +687,7 @@ impl Enemy for MachineGunner {
                     speed: 40.0,
                     death_cause: DeathCause::Default,
                     damage: 2,
-                    draw: Box::new(|pos, rotation| {
+                    draw: Box::new(|pos, size, rotation| {
                         ASSETS.laser.play(
                             pos,
                             Some(DrawTextureParams {

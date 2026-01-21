@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::{
     assets::ASSETS,
     enemies::{self, Bullet, Enemy, Projectile, check_collision_with_size},
@@ -64,7 +66,7 @@ impl Player {
 
     pub fn update(
         &mut self,
-        map: &Level,
+        map: &mut Level,
         projectiles: &mut Vec<Box<dyn Projectile>>,
         enemies: &mut Vec<Box<dyn Enemy>>,
         particles: &mut Vec<Particle>,
@@ -162,13 +164,37 @@ impl Player {
                     println!("out of bounds");
                     break;
                 }
-                let pottential_collider = &map.tiles[tile_no];
-
+                let pottential_collider = &mut map.tiles[tile_no];
+                let x0 = map_pos.x.floor() * TILE_SIZE * MAP_SCALE_FACTOR - point.0;
+                let x1 = (map_pos.x.floor() + 1.0) * MAP_SCALE_FACTOR * TILE_SIZE - point.0;
+                let y0 = map_pos.y.floor() * TILE_SIZE * MAP_SCALE_FACTOR - point.1;
+                let y1 = (map_pos.y.floor() + 1.0) * MAP_SCALE_FACTOR * TILE_SIZE - point.1;
+                if let Some(trigger) = pottential_collider.trigger {
+                    let mut checked = HashSet::new();
+                    let mut to_check = vec![tile_no];
+                    let mut buffer = Vec::new();
+                    while !to_check.is_empty() {
+                        to_check.retain_mut(|tile| {
+                            let tile = *tile;
+                            if !checked.contains(&tile)
+                                && let Some(trigger) = &mut pottential_collider.trigger
+                            {
+                                *trigger = true;
+                                let check =
+                                    [tile - 1, tile + 1, tile - map.width, tile + map.width];
+                                for i in check {
+                                    buffer.push(i);
+                                }
+                                checked.insert(tile);
+                                return false;
+                            } else {
+                                return false;
+                            }
+                        });
+                        to_check.append(&mut buffer);
+                    }
+                }
                 if pottential_collider.collision {
-                    let x0 = map_pos.x.floor() * TILE_SIZE * MAP_SCALE_FACTOR - point.0;
-                    let x1 = (map_pos.x.floor() + 1.0) * MAP_SCALE_FACTOR * TILE_SIZE - point.0;
-                    let y0 = map_pos.y.floor() * TILE_SIZE * MAP_SCALE_FACTOR - point.1;
-                    let y1 = (map_pos.y.floor() + 1.0) * MAP_SCALE_FACTOR * TILE_SIZE - point.1;
                     let mut clamped_x = false;
                     let wa = self.pos.x == x0;
 
@@ -182,6 +208,7 @@ impl Player {
 
                     self.pos.y = self.pos.y.clamp(y0, y1);
                     if self.pos.y == y0 && !clamped_x {
+                        dbg!("wa");
                         self.velocity.y = 0.0;
                         self.grounded = true;
                     } else if self.pos.y == y1 {
@@ -190,6 +217,7 @@ impl Player {
                 } else if index > 3 {
                     if pottential_collider.one_way_collision {
                         if self.velocity.y.is_sign_positive() {
+                            self.pos.y = y0;
                             self.velocity.y = 0.0;
                             self.grounded = true;
                         }

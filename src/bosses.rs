@@ -91,7 +91,6 @@ impl RedGuy {
                 }
             }
         }
-        dbg!(&points);
         points
     }
 }
@@ -99,8 +98,16 @@ impl Boss for RedGuy {
     fn new(tile: usize, level: &Level) -> Box<dyn Boss> {
         fn tile_around_without_collision(tile: usize, level: &Level) -> Vec<usize> {
             let mut without_collision = Vec::new();
-            let tiles = [tile - level.width, tile + level.width, tile - 1, tile + 1];
+            let tiles = [
+                tile.saturating_sub(level.width),
+                tile + level.width,
+                tile.saturating_sub(1),
+                tile + 1,
+            ];
             for tile in tiles {
+                if tile > level.tiles.len() {
+                    break;
+                }
                 if !level.tiles[tile].collision {
                     without_collision.push(tile);
                 }
@@ -136,7 +143,7 @@ impl Boss for RedGuy {
             attack_cooldowns: Vec::new(),
             catapult: load_pixel_map(&ASSETS.red_boss.get("catapult"), [61, 61, 61, 255]),
             crane: Self::get_crane(),
-            actions: vec![(RedGuyPhase::Entry, (0.0))],
+            actions: vec![(RedGuyPhase::ShootRockets, (0.0))],
             pos: to_game_pos(tile, level),
 
             allowed_area: (
@@ -181,17 +188,19 @@ impl Boss for RedGuy {
             match f.0 {
                 RedGuyPhase::ShootRockets => {
                     projectiles.push(Box::new(StandardProjectile {
+                        particle: None,
                         behaviour: Some(enemies::ProjectileBehaviour::FollowPlayer),
                         pos: self.pos + vec2(0.0, 0.0),
                         size: ASSETS.rocket.get_size(),
                         damage: 200,
                         direction: Vec2::ZERO,
                         speed: 20.0,
-                        draw: Box::new(|pos, rotation| {
+                        draw: Box::new(|pos, size, rotation| {
                             ASSETS.rocket.get("fly").play(
                                 pos,
                                 Some(DrawTextureParams {
                                     rotation,
+                                    pivot: Some(pos + size / 2.0),
                                     ..Default::default()
                                 }),
                             )

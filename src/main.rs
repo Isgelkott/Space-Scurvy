@@ -36,6 +36,7 @@ pub struct Game {
     pickups: Vec<Pickup>,
     projectiles: Vec<Box<dyn Projectile>>,
     particles: Vec<Particle>,
+    // map_animations: Vec<MapAnimation>,
     map_animations: Vec<MapAnimation>,
 }
 impl Game {
@@ -83,7 +84,8 @@ impl Game {
             scale_factor: 1.0,
             particles: Vec::new(),
             projectiles: Vec::new(),
-            map_animations: special_data.map_animations,
+            // map_animations: special_data.map_animations,
+            map_animations: Vec::new(),
             enemies,
             map,
             player: Player::new(special_data.spawn_location),
@@ -161,7 +163,7 @@ impl Game {
 
         if !self.win && !self.die {
             self.player.update(
-                &self.map,
+                &mut self.map,
                 &mut self.projectiles,
                 &mut self.enemies,
                 &mut self.particles,
