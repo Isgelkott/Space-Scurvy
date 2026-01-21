@@ -4,8 +4,9 @@ use macroquad::{prelude::*, rand::gen_range};
 
 use crate::{
     assets::ASSETS,
-    enemies::{self, Enemy, PresetEnemies},
+    enemies::{self, Enemy, PresetEnemies, Projectile, StandardProjectile},
     level::{self, Level, TILE_SIZE},
+    player::DeathCause,
     utils::{AnimationMethods, load_pixel_map, to_game_pos, to_world_pos},
 };
 pub enum Bosses {
@@ -22,7 +23,12 @@ pub trait Boss {
     fn new(tile: usize, level: &Level) -> Box<dyn Boss>
     where
         Self: Sized;
-    fn update(&mut self, map: &Level, enemies: &mut Vec<Box<dyn Enemy>>);
+    fn update(
+        &mut self,
+        map: &Level,
+        enemies: &mut Vec<Box<dyn Enemy>>,
+        projectiles: &mut Vec<Box<dyn Projectile>>,
+    );
 }
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum RedGuyPhase {
@@ -51,7 +57,7 @@ impl RedGuy {
                 allowed_area.1.x - 2.0 * ASSETS.red_boss.get_size().x - HOVER_RANGE.0,
             ),
             gen_range(
-                allowed_area.0.y + HOVER_RANGE.1,
+                allowed_area.1.y - HOVER_RANGE.1 - TILE_SIZE * 4.0,
                 allowed_area.1.y - ASSETS.red_boss.get_size().y * 2.0 - HOVER_RANGE.1,
             ),
         )
@@ -140,7 +146,12 @@ impl Boss for RedGuy {
         })
     }
 
-    fn update(&mut self, map: &Level, enemies: &mut Vec<Box<dyn Enemy>>) {
+    fn update(
+        &mut self,
+        map: &Level,
+        enemies: &mut Vec<Box<dyn Enemy>>,
+        projectiles: &mut Vec<Box<dyn Projectile>>,
+    ) {
         let params = DrawTextureParams {
             dest_size: Some(ASSETS.red_boss.get_size() * 2.0),
             ..Default::default()
@@ -168,9 +179,33 @@ impl Boss for RedGuy {
         self.actions.retain_mut(|f| {
             f.1 += get_frame_time();
             match f.0 {
+                RedGuyPhase::ShootRockets => {
+                    projectiles.push(Box::new(StandardProjectile {
+                        behaviour: Some(enemies::ProjectileBehaviour::FollowPlayer),
+                        pos: self.pos + vec2(0.0, 0.0),
+                        size: ASSETS.rocket.get_size(),
+                        damage: 200,
+                        direction: Vec2::ZERO,
+                        speed: 20.0,
+                        draw: Box::new(|pos, rotation| {
+                            ASSETS.rocket.get("fly").play(
+                                pos,
+                                Some(DrawTextureParams {
+                                    rotation,
+                                    ..Default::default()
+                                }),
+                            )
+                        }),
+                        death_cause: DeathCause::Acid,
+                    }));
+                    return false;
+                }
                 RedGuyPhase::Idle(point, duration) => {
                     self.pos = point + vec2(HOVER_RANGE.0 * f.1.sin(), HOVER_RANGE.1 * f.1.cos());
-                    let attacks = [RedGuyPhase::Load(RedGuy::rand_enemy())];
+                    let attacks = [
+                        RedGuyPhase::Load(RedGuy::rand_enemy()),
+                        RedGuyPhase::ShootRockets,
+                    ];
                     let attack = attacks[gen_range(0, attacks.len())];
                     if !self.attack_cooldowns.iter().any(|f| f.0 == attack) {
                         new_actions.push((attack, 0.0));
@@ -182,7 +217,7 @@ impl Boss for RedGuy {
                     // }
                 }
                 RedGuyPhase::Entry => {
-                    if f.1 > 1.0 {
+                    if f.1 > 5.0 {
                         new_actions.push((
                             RedGuyPhase::MoveTo(Self::new_location(self.allowed_area)),
                             0.0,

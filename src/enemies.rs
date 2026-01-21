@@ -380,47 +380,36 @@ impl Projectile for EnergyBall {
         }
     }
 }
-struct StandardProjectile {
-    pos: Vec2,
-    size: Vec2,
-    direction: Vec2,
-    speed: f32,
-    animation: &'static Animation,
-    damage: u32,
+pub enum ProjectileBehaviour {
+    FollowPlayer,
 }
-impl StandardProjectile {
-    fn new(
-        pos: Vec2,
-        size: Vec2,
-        direction: Vec2,
-        speed: f32,
-        animation: &'static Animation,
-        damage: u32,
-    ) -> Self {
-        Self {
-            size,
-            damage,
-            pos,
-            direction,
-            speed,
-            animation,
-        }
-    }
+pub struct StandardProjectile {
+    pub pos: Vec2,
+    pub size: Vec2,
+    pub direction: Vec2,
+    pub speed: f32,
+    pub draw: Box<dyn Fn(Vec2, f32)>,
+    pub behaviour: Option<ProjectileBehaviour>,
+    pub damage: u32,
+    pub death_cause: DeathCause,
 }
+impl StandardProjectile {}
 impl Projectile for StandardProjectile {
     fn on_player_impact(&self, player: &mut Player) -> bool {
-        player.damage(Some(self.damage), DeathCause::Default);
+        player.damage(Some(self.damage), self.death_cause);
         return true;
     }
-    fn update(&mut self, _player: &mut Player, _map: &Level) {
+    fn update(&mut self, player: &mut Player, _map: &Level) {
+        if let Some(behavoiour) = &self.behaviour {
+            match behavoiour {
+                ProjectileBehaviour::FollowPlayer => {
+                    self.direction += (player.pos - self.pos).normalize();
+                }
+            }
+        }
         self.pos += self.direction.normalize_or_zero() * self.speed * get_frame_time();
-        self.animation.play(
-            self.pos,
-            Some(DrawTextureParams {
-                rotation: self.direction.to_angle(),
-                ..Default::default()
-            }),
-        );
+
+        (self.draw)(self.pos, self.direction.to_angle());
     }
     fn collision<'a>(
         &self,
@@ -625,20 +614,31 @@ impl Enemy for MachineGunner {
         if !self.hit {
             self.flipped = player.pos.x > self.pos.x;
             if self.shoot_clock >= 0.4 {
-                projectiles.push(Box::new(StandardProjectile::new(
-                    self.pos
+                projectiles.push(Box::new(StandardProjectile {
+                    behaviour: Some(ProjectileBehaviour::FollowPlayer),
+                    pos: self.pos
                         + if self.flipped {
                             vec2(-8.5 + self.size.x, 15.0)
                         } else {
                             vec2(-8.5, 15.0)
                         },
-                    ASSETS.laser.get_size(),
-                    ((player.pos + player.size / 2.0) - (self.pos + self.size.y / 2.0))
+                    size: ASSETS.laser.get_size(),
+                    direction: ((player.pos + player.size / 2.0) - (self.pos + self.size.y / 2.0))
                         .normalize_or_zero(),
-                    40.0,
-                    &ASSETS.laser,
-                    2,
-                )));
+
+                    speed: 40.0,
+                    death_cause: DeathCause::Default,
+                    damage: 2,
+                    draw: Box::new(|pos, rotation| {
+                        ASSETS.laser.play(
+                            pos,
+                            Some(DrawTextureParams {
+                                rotation,
+                                ..Default::default()
+                            }),
+                        )
+                    }),
+                }));
                 self.shoot_clock = 0.0;
             } else {
                 self.shoot_clock += get_frame_time();
