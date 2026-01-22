@@ -408,11 +408,11 @@ impl StandardProjectile {
             Projectiles::Rocket => StandardProjectile {
                 particle: None,
                 behaviour: Some(enemies::ProjectileBehaviour::FollowPlayer),
-                pos: pos,
+                pos,
                 size: ASSETS.rocket.get_size(),
                 damage: 200,
                 direction: Vec2::ZERO,
-                speed: 40.0,
+                speed: 120.0,
                 draw: Box::new(|pos, size, rotation| {
                     ASSETS.rocket.get("fly").play(
                         pos,
@@ -462,7 +462,8 @@ impl Projectile for StandardProjectile {
                 ProjectileBehaviour::FollowPlayer => {
                     self.direction += ((player.pos + player.size / 2.0)
                         - (self.pos + self.size / 2.0))
-                        .normalize();
+                        .normalize()
+                        * self.speed;
                 }
             }
         }

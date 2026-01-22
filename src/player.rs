@@ -21,7 +21,7 @@ pub struct Player {
     iframes: Option<f32>,
     pub death: Option<(DeathCause, f32)>,
 }
-const FRICITON: f32 = 0.93;
+const FRICITON: f32 = 1.0;
 const GRAVITY: f32 = 900.;
 #[derive(Clone, Copy)]
 pub enum DeathCause {
@@ -60,7 +60,7 @@ impl Player {
             pos,
 
             velocity: Vec2::ZERO,
-            speed: 20.0,
+            speed: 150.0,
         }
     }
 
@@ -103,12 +103,12 @@ impl Player {
             }
 
             if self.grounded {
-                self.velocity.x += direction * self.speed;
+                self.velocity.x = direction * self.speed;
                 if is_key_pressed(KeyCode::Space) {
                     self.velocity.y = -320.0;
                 }
             } else {
-                self.velocity.x = (self.velocity.x + direction * self.speed) * FRICITON;
+                self.velocity.x = (direction * self.speed);
             }
 
             let collision_points = [
@@ -232,7 +232,11 @@ impl Player {
                 }
             }
             if self.grounded {
-                self.velocity.x = self.velocity.x * FRICITON;
+                if self.velocity.x.is_sign_positive() {
+                    self.velocity.x = (self.velocity.x - FRICITON).max(0.0);
+                } else {
+                    self.velocity.x = (self.velocity.x + FRICITON).min(0.0);
+                };
             }
             let shader = self.iframes.is_some() && (get_time() * 8.0).sin().is_sign_negative();
 
