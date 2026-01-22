@@ -21,7 +21,7 @@ mod particles;
 mod player;
 mod utils;
 
-const SCREEN_SIZE: (f32, f32) = (250.0, 250.0);
+const SCREEN_SIZE: (f32, f32) = (300.0, 244.0);
 
 pub struct Game {
     win: bool,
@@ -96,7 +96,8 @@ impl Game {
         set_default_camera();
         clear_background(BLACK);
 
-        self.scale_factor = (screen_width() / SCREEN_SIZE.0).min(screen_height() / SCREEN_SIZE.1);
+        self.scale_factor = (screen_width() / SCREEN_SIZE.0).floor();
+        dbg!(self.scale_factor);
         draw_texture_ex(
             &self.camera.render_target.as_ref().unwrap().texture,
             0.0,
@@ -144,11 +145,16 @@ impl Game {
             }
         }
     }
-    async fn update(&mut self) {
+    async fn update(&mut self, frame_time: f32) {
         clear_background(BLACK);
-        self.backgrounds.update();
+        self.backgrounds.update(frame_time);
         if let Some(boss) = &mut self.boss {
-            boss.update(&self.map, &mut self.enemies, &mut self.projectiles);
+            boss.update(
+                &self.map,
+                &mut self.enemies,
+                &mut self.projectiles,
+                frame_time,
+            );
         }
         self.map.draw_level();
         update_map_animations(&mut self.map_animations);
@@ -159,6 +165,7 @@ impl Game {
             &mut self.projectiles,
             &mut self.particles,
             &mut self.enemies,
+            frame_time,
         );
 
         if !self.win && !self.die {
@@ -167,20 +174,29 @@ impl Game {
                 &mut self.projectiles,
                 &mut self.enemies,
                 &mut self.particles,
+                frame_time,
             );
         }
-        self.camera.target = self.player.pos - vec2(0.0, 20.0);
-
+        self.camera.target = self.player.pos - vec2(0.0, 40.0);
+        draw_rectangle(
+            SCREEN_SIZE.0 - 10.0,
+            SCREEN_SIZE.1 - 10.0,
+            10.0,
+            10.0,
+            WHITE,
+        );
+        draw_rectangle(0.0, 0.0, 10.0, 10.0, RED);
         update_pickups(self);
         update_enemies(
             &self.player,
             &mut self.enemies,
             &self.map,
             &mut self.projectiles,
+            frame_time,
         );
 
-        update_particle_generators(&mut self.map.tiles, &mut self.particles);
-        update_particles(&mut self.particles);
+        update_particle_generators(&mut self.map.tiles, &mut self.particles, frame_time);
+        update_particles(&mut self.particles, frame_time);
         self.death();
     }
 }
@@ -234,7 +250,9 @@ impl GameManger {
         if self.game.die {
             self.die_screen();
         } else {
-            self.game.update().await;
+            let frame_time = get_frame_time().min(1. / 60.0);
+
+            self.game.update(frame_time).await;
             let mut black_bars: bool = false;
 
             let transition_length = 2.0;
@@ -252,7 +270,7 @@ impl GameManger {
                         - (ASSETS.win_animation.get_size().y
                             - ASSETS.jetpacker.get("idle").get_size().y),
                 );
-                self.clock += get_frame_time();
+                self.clock += frame_time;
                 if self.clock > ASSETS.win_animation.get_duration() + transition_length {
                     self.level_index += 1;
                     self.game = Game::new(self.levels[self.level_index]);

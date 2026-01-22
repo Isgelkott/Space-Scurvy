@@ -25,12 +25,12 @@ impl Star {
             speed,
         }
     }
-    fn update(&mut self) {
+    fn update(&mut self, frame_time: f32) {
         if self.delay < 0.0 {
             draw_texture(&ASSETS.star, self.pos.x.floor(), self.pos.y.floor(), WHITE);
-            self.pos += self.direction * self.speed * get_frame_time();
+            self.pos += self.direction * self.speed * frame_time;
         } else {
-            self.delay -= get_frame_time();
+            self.delay -= frame_time;
         }
     }
 }
@@ -69,7 +69,7 @@ impl BackgroundObject {
             rotation_mod,
         }
     }
-    fn update(&mut self) {
+    fn update(&mut self, frame_time: f32) {
         let size;
         self.rotation += self.rotation_mod;
         match &self.display {
@@ -109,7 +109,7 @@ impl BackgroundObject {
             },
         );
 
-        self.pos += self.direction * self.speed * get_frame_time()
+        self.pos += self.direction * self.speed * frame_time
     }
 }
 struct SpaceShip {
@@ -131,8 +131,8 @@ impl SpaceShip {
             origin: pos,
         }
     }
-    fn update(&mut self) {
-        self.pos += self.direction * get_frame_time() * 25.0;
+    fn update(&mut self, frame_time: f32) {
+        self.pos += self.direction * frame_time * 25.0;
         let params = Some(DrawTextureParams {
             flip_x: self.direction.x.is_sign_positive(),
             ..Default::default()
@@ -140,13 +140,13 @@ impl SpaceShip {
         if self.loop_timer < 0.0 {
             self.animation
                 .play_with_clock(self.pos, self.loop_clock, params.clone());
-            self.loop_clock += get_frame_time();
+            self.loop_clock += frame_time;
             if self.loop_clock > self.animation.get_duration() {
                 self.loop_timer = 7.0;
                 self.loop_clock = 0.0;
             }
         } else {
-            self.loop_timer -= get_frame_time();
+            self.loop_timer -= frame_time;
             draw_texture_ex(
                 &self.animation.0[0].0,
                 self.pos.x,
@@ -203,7 +203,7 @@ impl Background {
             size,
         }
     }
-    pub fn update(&mut self) {
+    pub fn update(&mut self, frame_time: f32) {
         for (index, spaceship) in self.spaceships.iter_mut().enumerate() {
             if spaceship.pos.x < 0.0 || spaceship.pos.x > self.size.x {
                 let right_edge = gen_range(0, 2) == 1;
@@ -220,12 +220,12 @@ impl Background {
                     },
                 );
             } else {
-                spaceship.update();
+                spaceship.update(frame_time);
             }
         }
 
         for chunk in &mut self.spawn_chunks {
-            *chunk -= get_frame_time();
+            *chunk -= frame_time;
         }
         self.objects.retain(|f| {
             return f.pos.x < self.size.x || f.pos.y < self.size.y;
@@ -263,10 +263,10 @@ impl Background {
             ));
         }
         for star in &mut self.stars {
-            star.update();
+            star.update(frame_time);
         }
         for object in &mut self.objects {
-            object.update();
+            object.update(frame_time);
         }
     }
 }

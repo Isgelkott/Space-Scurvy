@@ -5,7 +5,7 @@ use macroquad::{prelude::*, rand::gen_range};
 use crate::{
     assets::ASSETS,
     enemies::{self, Enemy, PresetEnemies, Projectile, StandardProjectile},
-    level::{self, Level, TILE_SIZE},
+    level::{Level, TILE_SIZE},
     player::DeathCause,
     utils::{AnimationMethods, load_pixel_map, to_game_pos, to_world_pos},
 };
@@ -28,6 +28,7 @@ pub trait Boss {
         map: &Level,
         enemies: &mut Vec<Box<dyn Enemy>>,
         projectiles: &mut Vec<Box<dyn Projectile>>,
+        time: f32,
     );
 }
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -158,6 +159,7 @@ impl Boss for RedGuy {
         map: &Level,
         enemies: &mut Vec<Box<dyn Enemy>>,
         projectiles: &mut Vec<Box<dyn Projectile>>,
+        frame_time: f32,
     ) {
         let params = DrawTextureParams {
             dest_size: Some(ASSETS.red_boss.get_size() * 2.0),
@@ -178,13 +180,13 @@ impl Boss for RedGuy {
             if f.1 < 0.0 {
                 return false;
             } else {
-                f.1 -= get_frame_time();
+                f.1 -= frame_time;
                 true
             }
         });
 
         self.actions.retain_mut(|f| {
-            f.1 += get_frame_time();
+            f.1 += frame_time;
             match f.0 {
                 RedGuyPhase::ShootRockets => {
                     projectiles.push(Box::new(StandardProjectile {
@@ -242,7 +244,7 @@ impl Boss for RedGuy {
                         ));
                         return false;
                     } else {
-                        self.pos = self.pos.lerp(point, f.1 * get_frame_time())
+                        self.pos = self.pos.lerp(point, f.1 * frame_time)
                     }
                 }
 

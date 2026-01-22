@@ -25,7 +25,7 @@ pub fn load_ase_texture(bytes: &[u8], layer: Option<u32>, frame: Option<u32>) ->
     texture
 }
 pub fn create_camera(dimensions: Vec2) -> Camera2D {
-    let rt = render_target(dimensions.y as u32, dimensions.y as u32);
+    let rt = render_target(dimensions.x as u32, dimensions.y as u32);
     rt.texture.set_filter(FilterMode::Nearest);
 
     Camera2D {

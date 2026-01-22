@@ -70,19 +70,20 @@ impl Player {
         projectiles: &mut Vec<Box<dyn Projectile>>,
         enemies: &mut Vec<Box<dyn Enemy>>,
         particles: &mut Vec<Particle>,
+        frame_time: f32,
     ) {
         if let Some(death) = &mut self.death {
-            death.1 += get_frame_time();
+            death.1 += frame_time;
         } else {
             if let Some(iframes) = &mut self.iframes {
                 if *iframes > 0.0 {
-                    *iframes -= get_frame_time();
+                    *iframes -= frame_time;
                 } else {
                     self.iframes = None;
                 }
             }
 
-            let mut top_animation: &Animation = &ASSETS.player.get("idle_top");
+            let top_animation: &Animation = &ASSETS.player.get("idle_top");
             let mut params = DrawTextureParams {
                 flip_x: self.previous_flipped,
 
@@ -118,14 +119,14 @@ impl Player {
                 (0.0, self.size.y),
                 (self.size.x, self.size.y),
             ];
-            self.velocity.y += GRAVITY * get_frame_time();
+            self.velocity.y += GRAVITY * frame_time;
             self.grounded = false;
             for (index, point) in collision_points.iter().enumerate() {
                 enemies.retain_mut(|f| {
                     let bounds = f.get_bounds();
                     let collision = check_collision_with_size(
                         (
-                            self.pos + vec2(point.0, point.1) + self.velocity * get_frame_time(),
+                            self.pos + vec2(point.0, point.1) + self.velocity * frame_time,
                             Vec2::ZERO,
                         ),
                         bounds,
@@ -152,9 +153,8 @@ impl Player {
                     return true;
                 });
 
-                let map_pos =
-                    (self.pos + self.velocity * get_frame_time() + vec2(point.0, point.1))
-                        / (TILE_SIZE * MAP_SCALE_FACTOR);
+                let map_pos = (self.pos + self.velocity * frame_time + vec2(point.0, point.1))
+                    / (TILE_SIZE * MAP_SCALE_FACTOR);
 
                 let mut tile_no = map_pos.y as usize * map.width as usize + map_pos.x as usize;
                 if map_pos.x.floor() == map_pos.x && index % 2 == 1 {
@@ -250,7 +250,7 @@ impl Player {
                         *animation_clock,
                         Some(params.clone()),
                     );
-                    *animation_clock += get_frame_time();
+                    *animation_clock += frame_time;
                 }
             } else {
                 top_animation.play(self.pos, Some(params.clone()));
@@ -263,7 +263,7 @@ impl Player {
             if self.velocity.y.abs() < 2. {
                 self.velocity.y = 0.0
             }
-            self.pos += self.velocity * get_frame_time();
+            self.pos += self.velocity * frame_time;
             if is_key_pressed(KeyCode::F) {
                 self.current_top_animation = Some((&ASSETS.player.get("shoot"), 0.0));
                 projectiles.push(Box::new(Bullet::new(

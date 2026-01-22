@@ -347,7 +347,7 @@ pub enum Levels {
 // }
 // impl MapAnimation {
 //     fn update(&mut self) {
-//         self.clock += get_frame_time();
+//         self.clock += frame_time;
 //         if self.clock > self.turn_on_value {
 //             self.clock = 0.0;
 //             self.inactive.play(self.pos, None);

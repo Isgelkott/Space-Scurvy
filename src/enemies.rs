@@ -1,18 +1,14 @@
 use std::{collections::HashMap, f32::consts::PI, sync::LazyLock};
 
-use image::imageops::rotate180;
 use macroquad::prelude::*;
 
 use crate::{
     assets::ASSETS,
     enemies,
-    level::{Layer, Level, MAP_SCALE_FACTOR, SpecialData, SpecialTileData, TILE_SIZE, VisualData},
+    level::{Level, MAP_SCALE_FACTOR, SpecialTileData, TILE_SIZE, VisualData},
     particles::Particle,
-    player::{self, DeathCause, Player},
-    utils::{
-        Animation, AnimationGroup, AnimationMethods, BULLET_MATERIAL, FISH_MATERIAL,
-        check_collision, to_world_pos,
-    },
+    player::{DeathCause, Player},
+    utils::*,
 };
 pub static ENEMY_IDS: LazyLock<HashMap<usize, PresetEnemies>> = LazyLock::new(|| {
     HashMap::from([
@@ -121,7 +117,7 @@ impl<'a> CollisionType<'a> {
     }
 }
 pub trait Projectile {
-    fn update(&mut self, player: &mut Player, map: &Level);
+    fn update(&mut self, player: &mut Player, map: &Level, frame_time: f32);
     fn death_cause(&self) -> DeathCause {
         DeathCause::Default
     }
@@ -191,8 +187,14 @@ impl Enemy for Fish {
     fn on_jumped_on_by_player(&self) -> bool {
         false
     }
-    fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
-        self.attack_cooldown -= get_frame_time();
+    fn update(
+        &mut self,
+        player: &Player,
+        map: &Level,
+        projectiles: &mut Vec<Box<dyn Projectile>>,
+        frame_time: f32,
+    ) {
+        self.attack_cooldown -= frame_time;
         if self.pos.y > self.origin.y {
             self.is_attacking = false;
             self.attack_clock = 0.0;
@@ -200,7 +202,7 @@ impl Enemy for Fish {
         }
 
         if self.is_attacking {
-            self.attack_clock += get_frame_time();
+            self.attack_clock += frame_time;
 
             self.pos.y =
                 self.origin.y + 64.0 * self.attack_clock.powi(2) - 128.0 * self.attack_clock;
@@ -234,7 +236,7 @@ impl Enemy for Fish {
                 let tile = to_world_pos(
                     vec2(
                         self.pos.x
-                            + self.direction * get_frame_time()
+                            + self.direction * frame_time
                             + if self.direction.is_sign_positive() {
                                 self.size.x
                             } else {
@@ -265,7 +267,7 @@ impl Enemy for Fish {
                         dbg!("beep bepp");
                         self.direction *= -1.0;
                     } else {
-                        self.pos.x += self.direction * get_frame_time();
+                        self.pos.x += self.direction * frame_time;
                     }
                 }
             }
@@ -305,8 +307,8 @@ impl Projectile for Bullet {
         return collision;
     }
 
-    fn update(&mut self, _player: &mut Player, map: &Level) {
-        self.pos += self.direction * self.speed * get_frame_time();
+    fn update(&mut self, _player: &mut Player, map: &Level, frame_time: f32) {
+        self.pos += self.direction * self.speed * frame_time;
         gl_use_material(&BULLET_MATERIAL);
         BULLET_MATERIAL.set_uniform("alpha", 1.0 / (self.pos.x - self.origin.x).abs().powf(1.5));
         draw_rectangle(
@@ -370,12 +372,12 @@ impl Projectile for EnergyBall {
         }
     }
 
-    fn update(&mut self, player: &mut Player, map: &Level)
+    fn update(&mut self, player: &mut Player, map: &Level, frame_time: f32)
     where
         Self: Sized,
     {
         self.animation.play(self.pos, None);
-        self.pos += self.velocity * get_frame_time();
+        self.pos += self.velocity * frame_time;
         if check_player_collision(self.pos, self.size, player) {
             player.damage(Some(20), DeathCause::Energy);
         }
@@ -454,7 +456,7 @@ impl Projectile for StandardProjectile {
         return true;
     }
 
-    fn update(&mut self, player: &mut Player, _map: &Level) {
+    fn update(&mut self, player: &mut Player, _map: &Level, frame_time: f32) {
         if let Some(behavoiour) = &self.behaviour {
             match behavoiour {
                 ProjectileBehaviour::FollowPlayer => {
@@ -464,7 +466,7 @@ impl Projectile for StandardProjectile {
                 }
             }
         }
-        self.pos += self.direction.normalize_or_zero() * self.speed * get_frame_time();
+        self.pos += self.direction.normalize_or_zero() * self.speed * frame_time;
 
         (self.draw)(self.pos, self.size, self.direction.to_angle());
     }
@@ -497,7 +499,13 @@ pub trait Enemy {
     where
         Self: Sized;
 
-    fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>);
+    fn update(
+        &mut self,
+        player: &Player,
+        map: &Level,
+        projectiles: &mut Vec<Box<dyn Projectile>>,
+        frame_time: f32,
+    );
     fn on_hit_by_player(&mut self) {}
 }
 struct FireWagon {
@@ -532,11 +540,12 @@ impl Enemy for FireWagon {
         player: &Player,
         map: &Level,
         _projectiles: &mut Vec<Box<dyn Projectile>>,
+        frame_time: f32,
     ) {
         for i in 0..2 {
             let i = i as f32 * 16.0;
             if check_collision(
-                self.pos + vec2(i, 0.0) + self.direction * self.speed * get_frame_time(),
+                self.pos + vec2(i, 0.0) + self.direction * self.speed * frame_time,
                 map,
             ) {
                 self.direction.x *= -1.0;
@@ -559,7 +568,7 @@ impl Enemy for FireWagon {
             self.size = vec2(11.0, 15.0)
         }
         ASSETS.fire_wagon.get("drive").play(self.pos, params);
-        self.pos += self.direction * self.speed * get_frame_time();
+        self.pos += self.direction * self.speed * frame_time;
     }
 }
 struct BombChain {
@@ -606,8 +615,14 @@ impl Enemy for BombChain {
         })
     }
 
-    fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
-        self.rotation += 5.0 * get_frame_time();
+    fn update(
+        &mut self,
+        player: &Player,
+        map: &Level,
+        projectiles: &mut Vec<Box<dyn Projectile>>,
+        frame_time: f32,
+    ) {
+        self.rotation += 5.0 * frame_time;
         self.bomb_pos = self.origin
             + (self.chain.width() + self.bomb.height() * 0.55)
                 * vec2((self.rotation).cos(), (self.rotation).sin())
@@ -667,7 +682,13 @@ impl Enemy for MachineGunner {
             hit: false,
         })
     }
-    fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
+    fn update(
+        &mut self,
+        player: &Player,
+        map: &Level,
+        projectiles: &mut Vec<Box<dyn Projectile>>,
+        frame_time: f32,
+    ) {
         if !self.hit {
             self.flipped = player.pos.x > self.pos.x;
             if self.shoot_clock >= 0.4 {
@@ -699,7 +720,7 @@ impl Enemy for MachineGunner {
                 }));
                 self.shoot_clock = 0.0;
             } else {
-                self.shoot_clock += get_frame_time();
+                self.shoot_clock += frame_time;
             }
             ASSETS.machine_gunner.get(&"shoot").play(
                 self.pos,
@@ -716,7 +737,7 @@ impl Enemy for MachineGunner {
                     ..Default::default()
                 }),
             );
-            self.hit_clock -= get_frame_time();
+            self.hit_clock -= frame_time;
         }
         if self.hit_clock < 0.0 {
             self.hit = false;
@@ -741,8 +762,14 @@ impl Enemy for SpikeBall {
             size: ASSETS.spike_ball.get_size(),
         })
     }
-    fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
-        self.pos += (player.pos - self.pos).normalize() * 10.0 * get_frame_time();
+    fn update(
+        &mut self,
+        player: &Player,
+        map: &Level,
+        projectiles: &mut Vec<Box<dyn Projectile>>,
+        frame_time: f32,
+    ) {
+        self.pos += (player.pos - self.pos).normalize() * 10.0 * frame_time;
         let _ = &ASSETS.spike_ball.get("4").play(self.pos, None);
     }
 }
@@ -824,8 +851,14 @@ impl Enemy for Jetpacker {
             pos: pos,
         })
     }
-    fn update(&mut self, player: &Player, map: &Level, projectiles: &mut Vec<Box<dyn Projectile>>) {
-        self.state.1 += get_frame_time();
+    fn update(
+        &mut self,
+        player: &Player,
+        map: &Level,
+        projectiles: &mut Vec<Box<dyn Projectile>>,
+        frame_time: f32,
+    ) {
+        self.state.1 += frame_time;
         if self.pos.y > self.origin.y {
             self.pos = self.origin;
             self.fall_velocity = 0.0;
@@ -869,7 +902,7 @@ impl Enemy for Jetpacker {
                     false
                 };
 
-                if self.state.1 + get_frame_time() > self.behavior_curve.last().unwrap().0 {
+                if self.state.1 + frame_time > self.behavior_curve.last().unwrap().0 {
                     self.state.1 = 0.0;
                     self.attacked = false;
                 }
@@ -921,7 +954,7 @@ impl Enemy for Jetpacker {
             }
         }
 
-        self.pos.y += self.fall_velocity * get_frame_time();
+        self.pos.y += self.fall_velocity * frame_time;
     }
 }
 pub fn update_enemies(
@@ -929,9 +962,10 @@ pub fn update_enemies(
     enemies: &mut Vec<Box<dyn Enemy>>,
     map: &Level,
     projectiles: &mut Vec<Box<dyn Projectile>>,
+    frame_time: f32,
 ) {
     for enemy in enemies.iter_mut() {
-        enemy.update(player, map, projectiles);
+        enemy.update(player, map, projectiles, frame_time);
     }
 }
 pub fn update_projectiles(
@@ -940,6 +974,7 @@ pub fn update_projectiles(
     projectiles: &mut Vec<Box<dyn Projectile>>,
     particles: &mut Vec<Particle>,
     enemies: &mut Vec<Box<dyn Enemy>>,
+    frame_time: f32,
 ) {
     projectiles.retain_mut(|f| {
         if let Some(collision) = f.collision(level, player, enemies) {
@@ -960,7 +995,7 @@ pub fn update_projectiles(
             }
         }
 
-        f.update(player, level);
+        f.update(player, level, frame_time);
         return true;
     });
 }

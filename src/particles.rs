@@ -1,6 +1,6 @@
 use macroquad::{
     color::Color, math::Vec2, prelude::animation, prelude::*, rand::gen_range,
-    shapes::draw_rectangle, time::get_frame_time,
+    shapes::draw_rectangle,
 };
 
 use crate::{
@@ -35,8 +35,8 @@ impl Particle {
             speed: 4.0,
         }
     }
-    pub fn update(&mut self) {
-        self.clock += get_frame_time();
+    pub fn update(&mut self, frame_time: f32) {
+        self.clock += frame_time;
         let mut pos = self.origin;
         if let Some(behavior_fn) = &self.behavior {
             pos.y = behavior_fn(self.clock) + self.origin.y;
@@ -74,12 +74,12 @@ impl ParticleGenerator {
             },
         }
     }
-    pub fn update(&mut self, particles: &mut Vec<Particle>) {
+    pub fn update(&mut self, particles: &mut Vec<Particle>, frame_time: f32) {
         if self.clock > self.interval {
             self.clock = 0.0;
             particles.push(self.gen_particle());
         } else {
-            self.clock += get_frame_time();
+            self.clock += frame_time;
         }
     }
     fn gen_particle(&self) -> Particle {
@@ -94,16 +94,20 @@ impl ParticleGenerator {
         }
     }
 }
-pub fn update_particle_generators(tiles: &mut Vec<Tile>, particles: &mut Vec<Particle>) {
+pub fn update_particle_generators(
+    tiles: &mut Vec<Tile>,
+    particles: &mut Vec<Particle>,
+    frame_time: f32,
+) {
     for tile in tiles.iter_mut() {
         if let Some(gener) = &mut tile.particle_generator {
-            gener.update(particles);
+            gener.update(particles, frame_time);
         }
     }
 }
-pub fn update_particles(particles: &mut Vec<Particle>) {
+pub fn update_particles(particles: &mut Vec<Particle>, frame_time: f32) {
     particles.retain_mut(|f| {
-        f.update();
+        f.update(frame_time);
         !f.should_die()
     });
 }
