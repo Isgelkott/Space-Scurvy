@@ -21,7 +21,7 @@ mod particles;
 mod player;
 mod utils;
 
-const SCREEN_SIZE: (f32, f32) = (300.0, 244.0);
+const SCREEN_SIZE: (f32, f32) = (300.0, 200.0);
 
 pub struct Game {
     win: bool,
@@ -96,8 +96,9 @@ impl Game {
         set_default_camera();
         clear_background(BLACK);
 
-        self.scale_factor = (screen_width() / SCREEN_SIZE.0).floor();
-        dbg!(self.scale_factor);
+        self.scale_factor = (screen_width() / SCREEN_SIZE.0)
+            .min(screen_height() / SCREEN_SIZE.1)
+            .floor();
         draw_texture_ex(
             &self.camera.render_target.as_ref().unwrap().texture,
             0.0,
@@ -130,12 +131,14 @@ impl Game {
                 DeathCause::Acid => "acid",
                 DeathCause::Energy => "energy",
                 DeathCause::Default => "default",
+                DeathCause::Explode => "explode",
             });
             if death.1 > animation.get_duration() {
                 self.die = true;
             } else {
                 animation.play_with_clock(
-                    self.player.pos - 8.,
+                    self.player.pos - ASSETS.death_animations.get_size() / 2.0
+                        + self.player.size / 2.0,
                     death.1,
                     Some(DrawTextureParams {
                         flip_x: self.player.previous_flipped,

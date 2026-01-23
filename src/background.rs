@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, sync::LazyLock};
+use std::f32::consts::PI;
 
 use macroquad::{math::Vec2, prelude::*, rand::gen_range, texture::Texture2D};
 

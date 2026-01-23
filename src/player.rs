@@ -28,6 +28,7 @@ pub enum DeathCause {
     Acid,
     Default,
     Energy,
+    Explode,
 }
 impl Player {
     pub fn damage(&mut self, dmg: Option<u32>, death_cause: DeathCause) {
@@ -208,7 +209,6 @@ impl Player {
 
                     self.pos.y = self.pos.y.clamp(y0, y1);
                     if self.pos.y == y0 && !clamped_x {
-                        dbg!("wa");
                         self.velocity.y = 0.0;
                         self.grounded = true;
                     } else if self.pos.y == y1 {

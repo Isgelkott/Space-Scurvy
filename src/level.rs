@@ -8,7 +8,7 @@ use crate::{
     utils::{Animation, AnimationMethods},
 };
 use macroquad::prelude::*;
-use std::{collections::HashMap, sync::LazyLock};
+use std::collections::HashMap;
 pub const TILE_SIZE: f32 = 16.0;
 pub const MAP_SCALE_FACTOR: f32 = 1.0;
 #[derive(PartialEq, Clone, Copy)]

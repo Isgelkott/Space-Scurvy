@@ -1,11 +1,8 @@
-use macroquad::{
-    color::Color, math::Vec2, prelude::animation, prelude::*, rand::gen_range,
-    shapes::draw_rectangle,
-};
+use macroquad::{color::Color, math::Vec2, prelude::*, rand::gen_range};
 
 use crate::{
     level::{MAP_SCALE_FACTOR, TILE_SIZE, Tile},
-    utils::{Animation, AnimationMethods},
+    utils::*,
 };
 pub enum Lifetime {
     ByDistance(f32),

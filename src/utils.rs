@@ -1,4 +1,4 @@
-use crate::level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE};
+use crate::level::{Level, MAP_SCALE_FACTOR, TILE_SIZE};
 use asefile::*;
 use image::*;
 use macroquad::{

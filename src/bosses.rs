@@ -7,7 +7,7 @@ use crate::{
     enemies::{self, Enemy, PresetEnemies, Projectile, StandardProjectile},
     level::{Level, TILE_SIZE},
     player::DeathCause,
-    utils::{AnimationMethods, load_pixel_map, to_game_pos, to_world_pos},
+    utils::*,
 };
 pub enum Bosses {
     RedGuy,
@@ -32,6 +32,8 @@ pub trait Boss {
     );
 }
 #[derive(Debug, PartialEq, Clone, Copy)]
+#[expect(dead_code)]
+
 enum RedGuyPhase {
     ThrowEnemies,
     ShootRockets,
@@ -189,26 +191,11 @@ impl Boss for RedGuy {
             f.1 += frame_time;
             match f.0 {
                 RedGuyPhase::ShootRockets => {
-                    projectiles.push(Box::new(StandardProjectile {
-                        particle: None,
-                        behaviour: Some(enemies::ProjectileBehaviour::FollowPlayer),
-                        pos: self.pos + vec2(0.0, 0.0),
-                        size: ASSETS.rocket.get_size(),
-                        damage: 200,
-                        direction: Vec2::ZERO,
-                        speed: 20.0,
-                        draw: Box::new(|pos, size, rotation| {
-                            ASSETS.rocket.get("fly").play(
-                                pos,
-                                Some(DrawTextureParams {
-                                    rotation,
-                                    pivot: Some(pos + size / 2.0),
-                                    ..Default::default()
-                                }),
-                            )
-                        }),
-                        death_cause: DeathCause::Acid,
-                    }));
+                    projectiles.push(Box::new(StandardProjectile::new(
+                        self.pos,
+                        enemies::Projectiles::Rocket,
+                        None,
+                    )));
                     return false;
                 }
                 RedGuyPhase::Idle(point, duration) => {

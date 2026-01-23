@@ -105,7 +105,6 @@ fn check_projectile_collision<'a>(
         return None;
     }
 }
-
 pub enum CollisionType<'a> {
     Player,
     Map,
@@ -402,7 +401,7 @@ pub struct StandardProjectile {
     pub particle: Option<Particle>,
 }
 impl StandardProjectile {
-    fn spawn(pos: Vec2, projectile: Projectiles, direction: Option<Vec2>) -> Self {
+    pub fn new(pos: Vec2, projectile: Projectiles, direction: Option<Vec2>) -> Self {
         let direction = direction.unwrap_or(Vec2::ZERO);
         match projectile {
             Projectiles::Rocket => StandardProjectile {
@@ -423,7 +422,7 @@ impl StandardProjectile {
                         }),
                     )
                 }),
-                death_cause: DeathCause::Acid,
+                death_cause: DeathCause::Explode,
             },
             Projectiles::EnergyBall => Self {
                 pos,
