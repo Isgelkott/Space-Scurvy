@@ -180,6 +180,12 @@ impl Game {
                 frame_time,
             );
         }
+        #[cfg(debug_assertions)]
+        {
+            if is_key_down(KeyCode::B) {
+                dbg!(self.player.pos);
+            }
+        }
         self.camera.target = self.player.pos - vec2(0.0, 40.0);
         draw_rectangle(
             SCREEN_SIZE.0 - 10.0,

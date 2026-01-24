@@ -49,6 +49,7 @@ struct RedGuy {
     catapult: Vec<(f32, Vec2)>,
     allowed_area: (Vec2, Vec2),
     actions: Vec<(RedGuyPhase, f32)>,
+    fallings_enemeies: Vec<(PresetEnemies, Vec2, f32)>,
     attack_cooldowns: Vec<(RedGuyPhase, f32)>,
 }
 impl RedGuy {
@@ -142,6 +143,7 @@ impl Boss for RedGuy {
         }
 
         Box::new(Self {
+            fallings_enemeies: Vec::new(),
             attack_cooldowns: Vec::new(),
             catapult: load_pixel_map(&ASSETS.red_boss.get("catapult"), [61, 61, 61, 255]),
             crane: Self::get_crane(),
@@ -254,7 +256,7 @@ impl Boss for RedGuy {
 
                             let next = plot[index + 1];
                             let next = (next.0, next.1 * 2.0);
-                            let p = (p.0, p.1 * 2.0);
+                            let p = (p.0, p.1);
                             if time > next.0 {
                                 time -= next.0;
                                 continue;
@@ -319,8 +321,7 @@ impl Boss for RedGuy {
                         self.pos.y + catapult_pos.y * 2.0 - size.y / 2.0,
                     );
                     if f.1 > duration {
-                        enemies.push(enemy.spawn(pos, map));
-                        dbg!("spawn enemy at ", pos, (self.pos, catapult_pos * 2.0));
+                        self.fallings_enemeies.push((enemy, pos, 0.0));
                         return false;
                     }
                     draw_texture_ex(
@@ -339,13 +340,27 @@ impl Boss for RedGuy {
             return true;
         });
         let draw_after = vec!["wings_bot", "bag_edge", "sack_bot"];
+
         for animation in draw_after {
             ASSETS
                 .red_boss
                 .get(animation)
                 .play(draw_pos, Some(params.clone()));
         }
+        self.fallings_enemeies.retain_mut(|enemy| {
+            enemy.2 += frame_time;
+            let func = -(-170. * enemy.2.powi(2) + 261.5 * enemy.2) + enemy.1.y;
 
+            let pos = vec2(enemy.1.x, func);
+            if pos.y > self.allowed_area.0.y + self.allowed_area.1.y {
+                let pos = vec2(pos.x, (pos.y / 16.0).floor() * 16.0);
+                enemies.push(enemy.0.spawn(pos, map));
+                return false;
+            }
+            dbg!(pos, enemy.1);
+            draw_texture(enemy.0.default_texture(), pos.x, pos.y, WHITE);
+            return true;
+        });
         self.actions.append(&mut new_actions);
     }
 }
