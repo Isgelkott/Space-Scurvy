@@ -1,12 +1,17 @@
 use macroquad::{color::Color, math::Vec2, prelude::*, rand::gen_range};
 
 use crate::{
+    assets::ASSETS,
     level::{MAP_SCALE_FACTOR, TILE_SIZE, Tile},
     utils::*,
 };
 pub enum Lifetime {
     ByDistance(f32),
     ByTime(f32),
+}
+pub enum Particles {
+    Explosion,
+    EnergyBallShatter,
 }
 pub struct Particle {
     draw: Box<dyn Fn(Vec2) -> ()>,
@@ -17,6 +22,27 @@ pub struct Particle {
     speed: f32,
 }
 impl Particle {
+    pub fn from(particle: Particles, pos: Vec2) -> Self {
+        match &particle {
+            Particles::Explosion => {
+                let animation = ASSETS.rocket.get("explode");
+                Self::new(
+                    Box::new(|f| ASSETS.rocket.get("explode").play(f, None)),
+                    Lifetime::ByTime((animation.get_duration())),
+                    None,
+                    pos,
+                )
+            }
+            Particles::EnergyBallShatter => Particle::new(
+                Box::new(|f| {
+                    ASSETS.energy_ball_shatter.play(f, None);
+                }),
+                crate::particles::Lifetime::ByTime(ASSETS.energy_ball_shatter.1 as f32 / 1000.0),
+                None,
+                pos,
+            ),
+        }
+    }
     pub fn new(
         draw: Box<dyn Fn(Vec2)>,
         lifetime: Lifetime,
@@ -43,11 +69,8 @@ impl Particle {
     }
     pub fn should_die(&self) -> bool {
         match self.lifetime {
-            Lifetime::ByDistance(distance) => {
-                let behaviour = self.behavior.as_ref().unwrap();
-                false //(behaviour(0.0) - (behaviour)(self.clock)).abs() > distance
-            }
             Lifetime::ByTime(time) => self.clock > time,
+            _ => panic!(),
         }
     }
 }

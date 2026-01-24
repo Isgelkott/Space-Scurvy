@@ -6,7 +6,7 @@ use crate::{
     assets::ASSETS,
     enemies,
     level::{Level, MAP_SCALE_FACTOR, SpecialTileData, TILE_SIZE, VisualData},
-    particles::Particle,
+    particles::{Particle, Particles},
     player::{DeathCause, Player},
     utils::*,
 };
@@ -398,14 +398,14 @@ pub struct StandardProjectile {
     pub behaviour: Option<ProjectileBehaviour>,
     pub damage: u32,
     pub death_cause: DeathCause,
-    pub particle: Option<Particle>,
+    pub particle: Option<Particles>,
 }
 impl StandardProjectile {
     pub fn new(pos: Vec2, projectile: Projectiles, direction: Option<Vec2>) -> Self {
         let direction = direction.unwrap_or(Vec2::ZERO);
         match projectile {
             Projectiles::Rocket => StandardProjectile {
-                particle: None,
+                particle: Some(Particles::Explosion),
                 behaviour: Some(enemies::ProjectileBehaviour::FollowPlayer),
                 pos,
                 size: ASSETS.rocket.get_size(),
@@ -435,16 +435,7 @@ impl StandardProjectile {
                 direction,
                 behaviour: Some(ProjectileBehaviour::FollowPlayer),
                 death_cause: DeathCause::Energy,
-                particle: Some(Particle::new(
-                    Box::new(|f| {
-                        ASSETS.energy_ball_shatter.play(f, None);
-                    }),
-                    crate::particles::Lifetime::ByTime(
-                        ASSETS.energy_ball_shatter.1 as f32 / 1000.0,
-                    ),
-                    None,
-                    pos,
-                )),
+                particle: Some(Particles::EnergyBallShatter),
             },
         }
     }

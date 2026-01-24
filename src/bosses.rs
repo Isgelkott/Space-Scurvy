@@ -6,7 +6,6 @@ use crate::{
     assets::ASSETS,
     enemies::{self, Enemy, PresetEnemies, Projectile, StandardProjectile},
     level::{Level, TILE_SIZE},
-    player::DeathCause,
     utils::*,
 };
 pub enum Bosses {
@@ -146,7 +145,7 @@ impl Boss for RedGuy {
             attack_cooldowns: Vec::new(),
             catapult: load_pixel_map(&ASSETS.red_boss.get("catapult"), [61, 61, 61, 255]),
             crane: Self::get_crane(),
-            actions: vec![(RedGuyPhase::ShootRockets, (0.0))],
+            actions: vec![(RedGuyPhase::Load(PresetEnemies::FireWagon), (0.0))],
             pos: to_game_pos(tile, level),
 
             allowed_area: (
@@ -271,16 +270,13 @@ impl Boss for RedGuy {
                             for (index, p) in self.crane.iter().enumerate() {
                                 if time < p.0 + lift_time {
                                     crane_pos = p.1;
-                                    if index < self.crane.len() - 1 {
-                                        let next = self.crane[index + 1];
-                                        crane_pos = crane_pos.lerp(next.1, next.0 / time);
-                                    }
 
                                     break;
                                 } else {
                                     time -= p.0;
                                 }
                             }
+                            crane_pos = crane_pos.floor();
                             ASSETS.red_boss.get("crane").play_with_clock(
                                 self.pos,
                                 f.1,
@@ -289,7 +285,7 @@ impl Boss for RedGuy {
                             draw_line(
                                 pos.x + enemy.default_texture().width() / 2.0,
                                 pos.y + 5.0,
-                                crane_pos.x * 2.0 + self.pos.x,
+                                (crane_pos.x) * 2.0 + self.pos.x,
                                 self.pos.y + 2.0 * crane_pos.y,
                                 2.,
                                 BROWN,
