@@ -483,7 +483,7 @@ pub trait Enemy {
     }
     fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> Option<(Vec2, f32, u32)> {
         let bounds = self.get_bounds();
-        Some((self.get_bounds().0 + self.get_bounds().1 / 2.0, 200.0, 10))
+        Some((self.get_bounds().0 + self.get_bounds().1 / 2.0, 400.0, 10))
     }
     fn get_bounds(&self) -> (Vec2, Vec2);
     fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>

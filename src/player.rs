@@ -53,7 +53,7 @@ impl Player {
         Self {
             death: None,
             iframes: None,
-            hp: 1,
+            hp: 100,
             previous_flipped: true,
             current_top_animation: None,
             grounded: false,
@@ -109,7 +109,7 @@ impl Player {
                     self.velocity.y = -320.0;
                 }
             } else {
-                self.velocity.x = (direction * self.speed);
+                self.velocity.x = direction * self.speed;
             }
 
             let collision_points = [

@@ -42,11 +42,10 @@ pub struct Game {
 impl Game {
     fn draw_hud(&self) {
         set_default_camera();
-        let hp = self.player.hp;
 
         for x in 0..5 {
             let x = x as f32;
-            let black_x = (hp as f32 - x * 20.0) / 20.0;
+            let black_x = (self.player.hp as f32 - x * 20.0) / 20.0;
 
             HP_MATERIAL.set_uniform("black_x", black_x);
             gl_use_material(&HP_MATERIAL);

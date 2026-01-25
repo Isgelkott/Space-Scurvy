@@ -4,7 +4,7 @@ use macroquad::{prelude::*, rand::gen_range};
 
 use crate::{
     assets::ASSETS,
-    enemies::{self, Enemy, PresetEnemies, Projectile, StandardProjectile},
+    enemies::{self, Enemy, PresetEnemies, Projectile, Projectiles, StandardProjectile},
     level::{Level, TILE_SIZE},
     utils::*,
 };
@@ -35,7 +35,7 @@ pub trait Boss {
 
 enum RedGuyPhase {
     ThrowEnemies,
-    ShootRockets,
+    ShootRocket,
     Idle(Vec2, f32),
     MoveTo(Vec2),
     Load(PresetEnemies),
@@ -51,6 +51,7 @@ struct RedGuy {
     actions: Vec<(RedGuyPhase, f32)>,
     fallings_enemeies: Vec<(PresetEnemies, Vec2, f32)>,
     attack_cooldowns: Vec<(RedGuyPhase, f32)>,
+    incoming_rockets: Vec<(Vec2, f32)>,
 }
 impl RedGuy {
     fn new_location(allowed_area: (Vec2, Vec2)) -> Vec2 {
@@ -143,11 +144,12 @@ impl Boss for RedGuy {
         }
 
         Box::new(Self {
+            incoming_rockets: Vec::new(),
             fallings_enemeies: Vec::new(),
             attack_cooldowns: Vec::new(),
             catapult: load_pixel_map(&ASSETS.red_boss.get("catapult"), [61, 61, 61, 255]),
             crane: Self::get_crane(),
-            actions: vec![(RedGuyPhase::Load(PresetEnemies::FireWagon), (0.0))],
+            actions: vec![(RedGuyPhase::ShootRocket, 0.0)],
             pos: to_game_pos(tile, level),
 
             allowed_area: (
@@ -191,19 +193,17 @@ impl Boss for RedGuy {
         self.actions.retain_mut(|f| {
             f.1 += frame_time;
             match f.0 {
-                RedGuyPhase::ShootRockets => {
-                    projectiles.push(Box::new(StandardProjectile::new(
-                        self.pos,
-                        enemies::Projectiles::Rocket,
-                        None,
-                    )));
+                RedGuyPhase::ShootRocket => {
+                    self.incoming_rockets
+                        .push((self.pos + (vec2(38.0, 43.0) - vec2(3.0, 4.)) * 2.0, 0.0));
+
                     return false;
                 }
                 RedGuyPhase::Idle(point, duration) => {
                     self.pos = point + vec2(HOVER_RANGE.0 * f.1.sin(), HOVER_RANGE.1 * f.1.cos());
                     let attacks = [
                         RedGuyPhase::Load(RedGuy::rand_enemy()),
-                        RedGuyPhase::ShootRockets,
+                        RedGuyPhase::ShootRocket,
                     ];
                     let attack = attacks[gen_range(0, attacks.len())];
                     if !self.attack_cooldowns.iter().any(|f| f.0 == attack) {
@@ -266,9 +266,7 @@ impl Boss for RedGuy {
                                 + self.pos;
                             draw_texture(enemy.default_texture(), pos.x, pos.y, WHITE);
                             let mut time = f.1 + lift_time;
-                            dbg!(time);
                             let mut crane_pos = Vec2::ZERO;
-                            dbg!(&self.crane);
                             for (index, p) in self.crane.iter().enumerate() {
                                 if time < p.0 + lift_time {
                                     crane_pos = p.1;
@@ -339,6 +337,7 @@ impl Boss for RedGuy {
             }
             return true;
         });
+
         let draw_after = vec!["wings_bot", "bag_edge", "sack_bot"];
 
         for animation in draw_after {
@@ -347,20 +346,36 @@ impl Boss for RedGuy {
                 .get(animation)
                 .play(draw_pos, Some(params.clone()));
         }
+
         self.fallings_enemeies.retain_mut(|enemy| {
             enemy.2 += frame_time;
             let func = -(-170. * enemy.2.powi(2) + 261.5 * enemy.2) + enemy.1.y;
 
             let pos = vec2(enemy.1.x, func);
-            if pos.y > self.allowed_area.0.y + self.allowed_area.1.y {
-                let pos = vec2(pos.x, (pos.y / 16.0).floor() * 16.0);
+            if check_collision(pos, map) {
+                let pos = vec2(pos.x, (pos.y / 16.0).floor() * 16.0 - 16.0);
                 enemies.push(enemy.0.spawn(pos, map));
                 return false;
             }
-            dbg!(pos, enemy.1);
+
             draw_texture(enemy.0.default_texture(), pos.x, pos.y, WHITE);
             return true;
         });
         self.actions.append(&mut new_actions);
+        self.incoming_rockets.retain_mut(|rocket| {
+            rocket.1 += frame_time;
+            let animation = ASSETS.red_boss.get("rocket_enter");
+            if rocket.1 > animation.get_duration() {
+                projectiles.push(Box::new(StandardProjectile::new(
+                    rocket.0,
+                    Projectiles::Rocket,
+                    None,
+                )));
+                return false;
+            } else {
+                animation.play_with_clock(rocket.0, rocket.1, None);
+                true
+            }
+        });
     }
 }

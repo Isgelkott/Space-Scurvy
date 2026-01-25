@@ -132,6 +132,7 @@ impl SpaceShip {
         }
     }
     fn update(&mut self, frame_time: f32) {
+        dbg!(self.pos);
         self.pos += self.direction * frame_time * 25.0;
         let params = Some(DrawTextureParams {
             flip_x: self.direction.x.is_sign_positive(),
@@ -206,6 +207,7 @@ impl Background {
     pub fn update(&mut self, frame_time: f32) {
         for (index, spaceship) in self.spaceships.iter_mut().enumerate() {
             if spaceship.pos.x < 0.0 || spaceship.pos.x > self.size.x {
+                println!("wa");
                 let right_edge = gen_range(0, 2) == 1;
                 let pos = Vec2 {
                     x: if right_edge { self.size.x } else { 0.0 },
