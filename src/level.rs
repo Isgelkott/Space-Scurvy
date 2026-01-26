@@ -46,6 +46,7 @@ pub enum VisualData {
 pub enum SpecialTileData {
     Path,
     Acid,
+    Cannon,
 }
 pub enum TriggerBehaviour {
     PlayAnimationOnce(&'static Animation),
@@ -275,6 +276,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                                 }
                                 _ => panic!(),
                             },
+
                             140..160 => {
                                 // enemies
                                 dbg!(id);
@@ -319,6 +321,12 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                                 };
                                 special_data.boss = Some((boss, tile_index));
                             }
+                            380..400 => match id {
+                                381 => {
+                                    tile.special_data.push(SpecialTileData::Cannon);
+                                }
+                                _ => panic!(),
+                            },
                             _ => {
                                 tile.visual.push(VisualData::ID(id));
                             }

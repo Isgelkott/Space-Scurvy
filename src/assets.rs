@@ -36,11 +36,15 @@ pub struct Assets {
     pub play_again: Texture2D,
     pub red_boss: AnimationGroup,
     pub rocket: AnimationGroup,
+    pub cannon: AnimationGroup,
+    pub cannon_barrel: AnimationGroup,
 }
 
 impl Assets {
     fn new() -> Self {
         Self {
+            cannon_barrel: load_animation_group(include_bytes!("../assets/cannon_barrel.aseprite")),
+            cannon: load_animation_group(include_bytes!("../assets/cannon.aseprite")),
             rocket: load_animation_group(include_bytes!("../assets/rocket.aseprite")),
             red_boss: load_animation_group(include_bytes!("../assets/boss1.aseprite")),
             play_again: load_ase_texture(

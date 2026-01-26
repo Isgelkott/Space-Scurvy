@@ -1,11 +1,11 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, f32::consts::PI};
 
 use macroquad::{prelude::*, rand::gen_range};
 
 use crate::{
     assets::ASSETS,
-    enemies::{self, Enemy, PresetEnemies, Projectile, Projectiles, StandardProjectile},
-    level::{Level, TILE_SIZE},
+    enemies::{Enemy, PresetEnemies, Projectile, Projectiles, StandardProjectile},
+    level::{Level, SpecialData, SpecialTileData, TILE_SIZE},
     utils::*,
 };
 pub enum Bosses {
@@ -30,11 +30,11 @@ pub trait Boss {
         time: f32,
     );
 }
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[expect(dead_code)]
 
 enum RedGuyPhase {
-    ThrowEnemies,
     ShootRocket,
     Idle(Vec2, f32),
     MoveTo(Vec2),
@@ -43,6 +43,28 @@ enum RedGuyPhase {
     Entry,
 }
 const HOVER_RANGE: (f32, f32) = (40.0, 20.0);
+enum CannonActions {
+    Shoot,
+    Idle,
+    OnCooldown(f32),
+}
+struct Cannon {
+    pos: Vec2,
+    clock: f32,
+    action: CannonActions,
+}
+impl Cannon {
+    fn cooldown() -> f32 {
+        gen_range(10.0, 12.0)
+    }
+    fn new(pos: Vec2) -> Self {
+        Self {
+            pos,
+            clock: 0.0,
+            action: CannonActions::Idle,
+        }
+    }
+}
 struct RedGuy {
     pos: Vec2,
     crane: Vec<(f32, Vec2)>,
@@ -52,8 +74,54 @@ struct RedGuy {
     fallings_enemeies: Vec<(PresetEnemies, Vec2, f32)>,
     attack_cooldowns: Vec<(RedGuyPhase, f32)>,
     incoming_rockets: Vec<(Vec2, f32)>,
+    cannon: Cannon,
 }
 impl RedGuy {
+    fn update_cannon(&mut self, frame_time: f32) {
+        self.cannon.clock += frame_time;
+        let direction = (self.pos - self.cannon.pos).normalize();
+        let stand_animation;
+        let barrel_animation;
+        match self.cannon.action {
+            CannonActions::OnCooldown(duration) => {
+                stand_animation = ASSETS.cannon.get("cooldown");
+                barrel_animation = ASSETS.cannon_barrel.get("cooldown");
+                if self.cannon.clock > duration {
+                    self.cannon.action = CannonActions::Idle;
+                    self.cannon.clock = 0.0;
+                }
+            }
+            CannonActions::Shoot => {
+                let flipped = direction.x.is_sign_positive();
+                barrel_animation = ASSETS.cannon.get("shoot");
+                stand_animation = ASSETS.cannon.get("idle");
+                if self.cannon.clock > barrel_animation.get_duration() {
+                    self.cannon.action = CannonActions::OnCooldown(Cannon::cooldown());
+                    self.cannon.clock = 0.0;
+                }
+            }
+            CannonActions::Idle => {
+                stand_animation = ASSETS.cannon.get("idle");
+                barrel_animation = ASSETS.cannon_barrel.get("idle");
+            }
+        }
+        let barrel_pos =
+            self.cannon.pos + vec2(65., 14.) - vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0);
+
+        let angle = (self.pos + ASSETS.red_boss.get_size() / 2.0 - barrel_pos).to_angle();
+        stand_animation.play(self.cannon.pos, None);
+
+        barrel_animation.play(
+            barrel_pos,
+            Some(DrawTextureParams {
+                rotation: angle - PI / 2.0,
+                pivot: Some(barrel_pos + vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0)),
+
+                ..Default::default()
+            }),
+        );
+    }
+
     fn new_location(allowed_area: (Vec2, Vec2)) -> Vec2 {
         vec2(
             gen_range(
@@ -144,6 +212,22 @@ impl Boss for RedGuy {
         }
 
         Box::new(Self {
+            cannon: Cannon::new(
+                to_game_pos(
+                    level
+                        .tiles
+                        .iter()
+                        .enumerate()
+                        .find(|f| {
+                            f.1.special_data
+                                .iter()
+                                .any(|f| *f == SpecialTileData::Cannon)
+                        })
+                        .unwrap()
+                        .0,
+                    level,
+                ) - vec2(0.0, ASSETS.cannon.get_size().y),
+            ),
             incoming_rockets: Vec::new(),
             fallings_enemeies: Vec::new(),
             attack_cooldowns: Vec::new(),
@@ -346,7 +430,7 @@ impl Boss for RedGuy {
                 .get(animation)
                 .play(draw_pos, Some(params.clone()));
         }
-
+        self.update_cannon(frame_time);
         self.fallings_enemeies.retain_mut(|enemy| {
             enemy.2 += frame_time;
             let func = -(-170. * enemy.2.powi(2) + 261.5 * enemy.2) + enemy.1.y;
