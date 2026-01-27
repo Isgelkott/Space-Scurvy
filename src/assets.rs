@@ -38,6 +38,7 @@ pub struct Assets {
     pub rocket: AnimationGroup,
     pub cannon: AnimationGroup,
     pub cannon_barrel: AnimationGroup,
+    pub lever: AnimationGroup,
 }
 
 impl Assets {
@@ -113,6 +114,7 @@ impl Assets {
                 (16.0, 16.0),
                 load_ase_texture(include_bytes!("../assets/spritesheet.aseprite"), None, None),
             ),
+            lever: load_animation_group(include_bytes!("../assets/lever.aseprite")),
         }
     }
 }

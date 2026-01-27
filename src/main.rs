@@ -156,6 +156,7 @@ impl Game {
                 &mut self.enemies,
                 &mut self.projectiles,
                 frame_time,
+                &self.player,
             );
         }
         self.map.draw_level();

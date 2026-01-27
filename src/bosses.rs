@@ -6,8 +6,21 @@ use crate::{
     assets::ASSETS,
     enemies::{Enemy, PresetEnemies, Projectile, Projectiles, StandardProjectile},
     level::{Level, SpecialData, SpecialTileData, TILE_SIZE},
+    player::{self, Player},
     utils::*,
 };
+fn find_special_tile_data(level: &Level, data: SpecialTileData) -> Vec2 {
+    to_game_pos(
+        level
+            .tiles
+            .iter()
+            .enumerate()
+            .find(|f| f.1.special_data.iter().any(|f| *f == data))
+            .unwrap()
+            .0,
+        level,
+    )
+}
 pub enum Bosses {
     RedGuy,
 }
@@ -28,6 +41,7 @@ pub trait Boss {
         enemies: &mut Vec<Box<dyn Enemy>>,
         projectiles: &mut Vec<Box<dyn Projectile>>,
         time: f32,
+        player: &Player,
     );
 }
 
@@ -43,6 +57,7 @@ enum RedGuyPhase {
     Entry,
 }
 const HOVER_RANGE: (f32, f32) = (40.0, 20.0);
+#[derive(PartialEq)]
 enum CannonActions {
     Shoot,
     Idle,
@@ -53,11 +68,12 @@ struct Cannon {
     clock: f32,
     action: CannonActions,
 }
+
 impl Cannon {
     fn cooldown() -> f32 {
         gen_range(10.0, 12.0)
     }
-    fn new(pos: Vec2) -> Self {
+    fn new(pos: Vec2, level: &Level) -> Self {
         Self {
             pos,
             clock: 0.0,
@@ -77,11 +93,16 @@ struct RedGuy {
     cannon: Cannon,
 }
 impl RedGuy {
-    fn update_cannon(&mut self, frame_time: f32) {
+    fn update_cannon(&mut self, frame_time: f32, player: &Player) {
         self.cannon.clock += frame_time;
         let direction = (self.pos - self.cannon.pos).normalize();
         let stand_animation;
         let barrel_animation;
+        let center =
+            self.cannon.pos + vec2(65., 14.) - vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0);
+
+        let angle = (self.pos + ASSETS.red_boss.get_size() / 2.0 - center).to_angle() - PI / 2.0;
+        let offset = -14.0;
         match self.cannon.action {
             CannonActions::OnCooldown(duration) => {
                 stand_animation = ASSETS.cannon.get("cooldown");
@@ -93,10 +114,12 @@ impl RedGuy {
             }
             CannonActions::Shoot => {
                 let flipped = direction.x.is_sign_positive();
-                barrel_animation = ASSETS.cannon.get("shoot");
+                barrel_animation = ASSETS.cannon_barrel.get("shoot");
                 stand_animation = ASSETS.cannon.get("idle");
-                if self.cannon.clock > barrel_animation.get_duration() {
-                    self.cannon.action = CannonActions::OnCooldown(Cannon::cooldown());
+                let duration = barrel_animation.get_duration();
+
+                if self.cannon.clock > duration {
+                    // self.cannon.action = CannonActions::OnCooldown(Cannon::cooldown());
                     self.cannon.clock = 0.0;
                 }
             }
@@ -105,21 +128,53 @@ impl RedGuy {
                 barrel_animation = ASSETS.cannon_barrel.get("idle");
             }
         }
-        let barrel_pos =
-            self.cannon.pos + vec2(65., 14.) - vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0);
 
-        let angle = (self.pos + ASSETS.red_boss.get_size() / 2.0 - barrel_pos).to_angle();
         stand_animation.play(self.cannon.pos, None);
-
         barrel_animation.play(
-            barrel_pos,
+            center + vec2(offset * angle.cos(), offset * angle.sin()),
             Some(DrawTextureParams {
-                rotation: angle - PI / 2.0,
-                pivot: Some(barrel_pos + vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0)),
+                rotation: angle,
+                pivot: Some(center + vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0)),
 
                 ..Default::default()
             }),
         );
+        if self.cannon.action == CannonActions::Shoot
+            && self.cannon.clock > ASSETS.cannon_barrel.get("shoot").get_duration() - 0.2
+        {
+            let shoot_point = vec2(
+                center.x + -83.0 * angle.sin(),
+                center.y + 83.0 * angle.cos(),
+            );
+            let boss_center = vec2(
+                self.pos.x + ASSETS.red_boss.get_size().x,
+                self.pos.y + ASSETS.red_boss.get_size().y,
+            );
+            let lines = [
+                (Color::from_hex(0x99e65f), 2.0),
+                (Color::from_hex(0x99e65f), 8.0),
+                (Color::from_hex(0x99e65f), 2.0),
+            ];
+            let tot_width: f32 = lines.iter().map(|f| f.1).sum();
+            let begin_lines = shoot_point - vec2(tot_width / 2.0 * (angle).cos(), 0.0);
+            let mut width = 0.0;
+            for line in lines {
+                draw_line(
+                    begin_lines.x + angle.cos() * width,
+                    begin_lines.y + angle.sin(),
+                    boss_center.x,
+                    boss_center.y,
+                    line.1,
+                    line.0,
+                );
+                width += line.1
+            }
+        }
+        let switch_pos = self.pos + vec2(66.0, 72.0);
+        if is_key_pressed(KeyCode::E) && (player.pos.x - switch_pos.x).abs() < 100.0 {
+            self.cannon.action = CannonActions::Shoot;
+            self.cannon.clock = 0.0;
+        }
     }
 
     fn new_location(allowed_area: (Vec2, Vec2)) -> Vec2 {
@@ -227,6 +282,7 @@ impl Boss for RedGuy {
                         .0,
                     level,
                 ) - vec2(0.0, ASSETS.cannon.get_size().y),
+                level,
             ),
             incoming_rockets: Vec::new(),
             fallings_enemeies: Vec::new(),
@@ -249,6 +305,7 @@ impl Boss for RedGuy {
         enemies: &mut Vec<Box<dyn Enemy>>,
         projectiles: &mut Vec<Box<dyn Projectile>>,
         frame_time: f32,
+        player: &Player,
     ) {
         let params = DrawTextureParams {
             dest_size: Some(ASSETS.red_boss.get_size() * 2.0),
@@ -430,7 +487,7 @@ impl Boss for RedGuy {
                 .get(animation)
                 .play(draw_pos, Some(params.clone()));
         }
-        self.update_cannon(frame_time);
+        self.update_cannon(frame_time, player);
         self.fallings_enemeies.retain_mut(|enemy| {
             enemy.2 += frame_time;
             let func = -(-170. * enemy.2.powi(2) + 261.5 * enemy.2) + enemy.1.y;

@@ -47,6 +47,7 @@ pub enum SpecialTileData {
     Path,
     Acid,
     Cannon,
+    Switch,
 }
 pub enum TriggerBehaviour {
     PlayAnimationOnce(&'static Animation),
@@ -238,10 +239,11 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
 
                     let world_pos = vec2((x - area.0) as f32, (y - area.1) as f32) * TILE_SIZE;
                     if id != 0 {
+                        let mut visual = None;
                         match id {
                             0..20 => {
                                 tile.collision = true;
-                                tile.visual.push(VisualData::ID(id));
+                                visual = Some(id);
                             }
                             60..80 => {
                                 let map_animation = match id {
@@ -291,12 +293,12 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                                 dbg!(enemy, world_pos, id);
                                 special_data.enemies.push((enemy, world_pos));
 
-                                tile.visual.push(VisualData::ID(id));
+                                visual = Some(id);
                             }
                             200..220 => {
                                 // one way collision
                                 tile.one_way_collision = true;
-                                tile.visual.push(VisualData::ID(id));
+                                visual = Some(id);
                             }
                             221 => {
                                 special_data.spawn_location = world_pos;
@@ -325,11 +327,17 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                                 381 => {
                                     tile.special_data.push(SpecialTileData::Cannon);
                                 }
+                                382 => {
+                                    tile.special_data.push(SpecialTileData::Switch);
+                                }
                                 _ => panic!(),
                             },
                             _ => {
-                                tile.visual.push(VisualData::ID(id));
+                                visual = Some(id);
                             }
+                        };
+                        if let Some(id) = visual {
+                            tile.visual.push(VisualData::ID(id));
                         }
                     }
                 }
