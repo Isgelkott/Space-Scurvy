@@ -20,8 +20,7 @@ mod level;
 mod particles;
 mod player;
 mod utils;
-
-const SCREEN_SIZE: (f32, f32) = (304.0, 171.0);
+const SCREEN_SIZE: (f32, f32) = (300.0, 200.0);
 
 pub struct Game {
     win: bool,

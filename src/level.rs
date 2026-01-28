@@ -45,6 +45,7 @@ pub enum VisualData {
 #[derive(PartialEq, Clone, Copy)]
 pub enum SpecialTileData {
     Path,
+    OutOfBounds,
     Acid,
     Cannon,
     Switch,
@@ -304,6 +305,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                                 special_data.spawn_location = world_pos;
                             }
                             241 => tile.trigger = Some(false),
+                            243 => tile.special_data.push(SpecialTileData::OutOfBounds),
                             340..360 => {
                                 let pickup = match id {
                                     341 => Pickup {

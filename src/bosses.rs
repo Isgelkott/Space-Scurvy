@@ -125,17 +125,21 @@ impl RedGuy {
         let center =
             self.cannon.pos + vec2(65., 14.) - vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0);
 
-        let desired_angle =
-            (self.pos + ASSETS.red_boss.get_size() / 2.0 - center).to_angle() - PI / 2.0;
         let shoot_point = vec2(center.x, center.y);
         let boss_center = vec2(
             self.pos.x + ASSETS.red_boss.get_size().x,
             self.pos.y + ASSETS.red_boss.get_size().y,
         );
-        let angle_diff = desired_angle - self.cannon.angle;
-        if angle_diff.abs() > 0.1 {
-            self.cannon.angle += 1.0 * get_frame_time() * angle_diff.signum();
+        let desired_angle = (self.pos + ASSETS.red_boss.get_size() / 2.0 - center);
+        let difference =
+            desired_angle.angle_between(vec2(self.cannon.angle.cos(), self.cannon.angle.sin()));
+        if (difference - PI).abs() < 0.2 {
+            dbg!((difference - PI));
+        } else {
+            dbg!(desired_angle, self.cannon.angle, difference);
+            self.cannon.angle += difference.signum() * frame_time;
         }
+
         match self.cannon.action {
             CannonActions::OnCooldown(duration) => {
                 stand_animation = ASSETS.cannon.get("cooldown");
@@ -174,13 +178,12 @@ impl RedGuy {
         barrel_animation.play(
             center,
             Some(DrawTextureParams {
-                rotation: self.cannon.angle,
+                rotation: self.cannon.angle + PI / 2.0,
                 pivot: Some(center + vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0)),
 
                 ..Default::default()
             }),
         );
-        dbg!(&self.cannon.action);
         if self.cannon.action == CannonActions::Shoot
             && self.cannon.clock > ASSETS.cannon_barrel.get("shoot").get_duration() - 0.2
         {
@@ -241,7 +244,7 @@ impl RedGuy {
 }
 impl Boss for RedGuy {
     fn new(tile: usize, level: &Level) -> Box<dyn Boss> {
-        fn tile_around_without_collision(tile: usize, level: &Level) -> Vec<usize> {
+        fn valid_tiles_around(tile: usize, level: &Level) -> Vec<usize> {
             let mut without_collision = Vec::new();
             let tiles = [
                 tile.saturating_sub(level.width),
@@ -253,7 +256,13 @@ impl Boss for RedGuy {
                 if tile > level.tiles.len() {
                     break;
                 }
-                if !level.tiles[tile].collision {
+                let object = &level.tiles[tile];
+                if !(object.collision
+                    || object
+                        .special_data
+                        .iter()
+                        .any(|f| *f == SpecialTileData::OutOfBounds))
+                {
                     without_collision.push(tile);
                 }
             }
@@ -276,7 +285,7 @@ impl Boss for RedGuy {
                 max_x = max_x.max(min_x);
                 min_y = min_y.min(*tile / level.width);
                 max_y = max_y.max(*tile / level.width);
-                for neighbour in tile_around_without_collision(*tile, level) {
+                for neighbour in valid_tiles_around(*tile, level) {
                     buffer.push(neighbour);
                 }
                 return false;
