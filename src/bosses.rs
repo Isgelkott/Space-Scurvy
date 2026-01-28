@@ -134,9 +134,7 @@ impl RedGuy {
         let difference =
             desired_angle.angle_between(vec2(self.cannon.angle.cos(), self.cannon.angle.sin()));
         if (difference - PI).abs() < 0.2 {
-            dbg!((difference - PI));
         } else {
-            dbg!(desired_angle, self.cannon.angle, difference);
             self.cannon.angle += difference.signum() * frame_time;
         }
 
@@ -516,16 +514,25 @@ impl Boss for RedGuy {
                 .get(animation)
                 .play(draw_pos, Some(params.clone()));
         }
-        self.update_cannon(frame_time, player);
         if let Some(cooldown) = &mut self
             .attack_cooldowns
             .iter()
             .find(|f| f.0 == RedGuyPhase::ShootRocket)
         {
             if cooldown.1 > cooldown.2 / 2.0 {
-                ASSETS.red_boss.get("rocket").play(self.pos, None);
+                ASSETS
+                    .red_boss
+                    .get("rocket")
+                    .play(self.pos, Some(params.clone()));
             }
+        } else {
+            ASSETS
+                .red_boss
+                .get("rocket")
+                .play(self.pos, Some(params.clone()));
         }
+        self.update_cannon(frame_time, player);
+
         if let Some(shot) = &mut self.cannon.shot {
             dbg!(shot.pos);
             let boss_size = ASSETS.red_boss.get_size();
