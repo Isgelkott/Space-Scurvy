@@ -21,7 +21,7 @@ mod particles;
 mod player;
 mod utils;
 
-const SCREEN_SIZE: (f32, f32) = (300.0, 200.0);
+const SCREEN_SIZE: (f32, f32) = (304.0, 171.0);
 
 pub struct Game {
     win: bool,
@@ -157,6 +157,7 @@ impl Game {
                 &mut self.projectiles,
                 frame_time,
                 &self.player,
+                &mut self.particles,
             );
         }
         self.map.draw_level();
