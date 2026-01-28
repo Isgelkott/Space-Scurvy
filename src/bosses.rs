@@ -112,7 +112,7 @@ struct RedGuy {
     allowed_area: (Vec2, Vec2),
     actions: Vec<(RedGuyPhase, f32)>,
     fallings_enemeies: Vec<(PresetEnemies, Vec2, f32)>,
-    attack_cooldowns: Vec<(RedGuyPhase, f32)>,
+    attack_cooldowns: Vec<(RedGuyPhase, f32, f32)>,
     incoming_rocket: Option<(Vec2, f32)>,
     cannon: Cannon,
 }
@@ -133,7 +133,9 @@ impl RedGuy {
             self.pos.y + ASSETS.red_boss.get_size().y,
         );
         let angle_diff = desired_angle - self.cannon.angle;
-        self.cannon.angle += 1.0 * get_frame_time() * angle_diff.signum();
+        if angle_diff.abs() > 0.1 {
+            self.cannon.angle += 1.0 * get_frame_time() * angle_diff.signum();
+        }
         match self.cannon.action {
             CannonActions::OnCooldown(duration) => {
                 stand_animation = ASSETS.cannon.get("cooldown");
@@ -340,10 +342,10 @@ impl Boss for RedGuy {
         let mut new_actions = Vec::new();
         if is_key_down(KeyCode::F) {}
         self.attack_cooldowns.retain_mut(|f| {
-            if f.1 < 0.0 {
+            if f.1 > f.2 {
                 return false;
             } else {
-                f.1 -= frame_time;
+                f.1 += frame_time;
                 true
             }
         });
@@ -366,7 +368,8 @@ impl Boss for RedGuy {
                     let attack = attacks[gen_range(0, attacks.len())];
                     if !self.attack_cooldowns.iter().any(|f| f.0 == attack) {
                         new_actions.push((attack, 0.0));
-                        self.attack_cooldowns.push((attack, gen_range(5.0, 8.0)));
+                        self.attack_cooldowns
+                            .push((attack, 0.0, gen_range(5.0, 8.0)));
                     }
 
                     // if f.1 > duration {
@@ -505,6 +508,15 @@ impl Boss for RedGuy {
                 .play(draw_pos, Some(params.clone()));
         }
         self.update_cannon(frame_time, player);
+        if let Some(cooldown) = &mut self
+            .attack_cooldowns
+            .iter()
+            .find(|f| f.0 == RedGuyPhase::ShootRocket)
+        {
+            if cooldown.1 > cooldown.2 / 2.0 {
+                ASSETS.red_boss.get("rocket").play(self.pos, None);
+            }
+        }
         if let Some(shot) = &mut self.cannon.shot {
             dbg!(shot.pos);
             let boss_size = ASSETS.red_boss.get_size();
@@ -557,16 +569,17 @@ impl Boss for RedGuy {
             return true;
         });
         self.actions.append(&mut new_actions);
-        if let Some(mut rocket) = self.incoming_rocket {
+        if let Some(rocket) = &mut self.incoming_rocket {
+            dbg!(&rocket);
             rocket.1 += frame_time;
             let animation = ASSETS.red_boss.get("rocket_enter");
             if rocket.1 > animation.get_duration() {
-                projectiles.push(Box::new(StandardProjectile::new(
-                    rocket.0,
+                self.incoming_rocket = None;
+                projectiles.push(Box::new(StandardProjectile::from(
+                    self.pos + vec2(38.0, 43.0) * 2.0,
                     Projectiles::Rocket,
                     None,
                 )));
-                self.incoming_rocket = None;
             } else {
                 animation.play_with_clock(rocket.0, rocket.1, None);
             }

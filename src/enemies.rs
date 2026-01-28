@@ -401,7 +401,7 @@ pub struct StandardProjectile {
     pub particle: Option<Particles>,
 }
 impl StandardProjectile {
-    pub fn new(pos: Vec2, projectile: Projectiles, direction: Option<Vec2>) -> Self {
+    pub fn from(pos: Vec2, projectile: Projectiles, direction: Option<Vec2>) -> Self {
         let direction = direction.unwrap_or(Vec2::ZERO);
         match projectile {
             Projectiles::Rocket => StandardProjectile {

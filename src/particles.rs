@@ -22,7 +22,8 @@ pub struct Particle {
     speed: f32,
 }
 impl Particle {
-    pub fn from(particle: Particles, pos: Vec2) -> Self {
+    // pub fn static_from_animation(animation: &'static Animation) -> Self {}
+    pub fn preset(particle: Particles, pos: Vec2) -> Self {
         match &particle {
             Particles::Explosion => {
                 let animation = ASSETS.rocket.get("explode");
