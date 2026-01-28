@@ -4,8 +4,12 @@ use macroquad::{prelude::*, rand::gen_range};
 
 use crate::{
     assets::ASSETS,
-    enemies::{Enemy, PresetEnemies, Projectile, Projectiles, StandardProjectile},
+    enemies::{
+        Enemy, PresetEnemies, Projectile, Projectiles, StandardProjectile,
+        check_collision_with_size,
+    },
     level::{Level, SpecialData, SpecialTileData, TILE_SIZE},
+    particles::{self, Particle},
     player::{self, Player},
     utils::*,
 };
@@ -42,6 +46,7 @@ pub trait Boss {
         projectiles: &mut Vec<Box<dyn Projectile>>,
         time: f32,
         player: &Player,
+        particles: &mut Vec<Particle>,
     );
 }
 
@@ -51,22 +56,25 @@ pub trait Boss {
 enum RedGuyPhase {
     ShootRocket,
     Idle(Vec2, f32),
-    MoveTo(Vec2),
+    MoveTo(Vec2, Vec2),
     Load(PresetEnemies),
     Shoot(PresetEnemies),
     Entry,
 }
 const HOVER_RANGE: (f32, f32) = (40.0, 20.0);
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum CannonActions {
     Shoot,
     Idle,
     OnCooldown(f32),
 }
+
 struct Cannon {
     pos: Vec2,
+    angle: f32,
     clock: f32,
     action: CannonActions,
+    shot: Option<CannonShot>,
 }
 
 impl Cannon {
@@ -75,9 +83,25 @@ impl Cannon {
     }
     fn new(pos: Vec2, level: &Level) -> Self {
         Self {
+            shot: None,
+            angle: 0.0,
             pos,
             clock: 0.0,
             action: CannonActions::Idle,
+        }
+    }
+}
+struct CannonShot {
+    pos: Vec2,
+    speed: f32,
+    past_pos: Vec<Vec2>,
+}
+impl CannonShot {
+    fn new(pos: Vec2) -> Self {
+        Self {
+            pos,
+            speed: 20.0,
+            past_pos: Vec::new(),
         }
     }
 }
@@ -89,7 +113,7 @@ struct RedGuy {
     actions: Vec<(RedGuyPhase, f32)>,
     fallings_enemeies: Vec<(PresetEnemies, Vec2, f32)>,
     attack_cooldowns: Vec<(RedGuyPhase, f32)>,
-    incoming_rockets: Vec<(Vec2, f32)>,
+    incoming_rocket: Option<(Vec2, f32)>,
     cannon: Cannon,
 }
 impl RedGuy {
@@ -101,8 +125,15 @@ impl RedGuy {
         let center =
             self.cannon.pos + vec2(65., 14.) - vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0);
 
-        let angle = (self.pos + ASSETS.red_boss.get_size() / 2.0 - center).to_angle() - PI / 2.0;
-        let offset = -14.0;
+        let desired_angle =
+            (self.pos + ASSETS.red_boss.get_size() / 2.0 - center).to_angle() - PI / 2.0;
+        let shoot_point = vec2(center.x, center.y);
+        let boss_center = vec2(
+            self.pos.x + ASSETS.red_boss.get_size().x,
+            self.pos.y + ASSETS.red_boss.get_size().y,
+        );
+        let angle_diff = desired_angle - self.cannon.angle;
+        self.cannon.angle += 1.0 * get_frame_time() * angle_diff.signum();
         match self.cannon.action {
             CannonActions::OnCooldown(duration) => {
                 stand_animation = ASSETS.cannon.get("cooldown");
@@ -119,6 +150,8 @@ impl RedGuy {
                 let duration = barrel_animation.get_duration();
 
                 if self.cannon.clock > duration {
+                    self.cannon.shot = Some(CannonShot::new(shoot_point));
+                    dbg!("wa");
                     // self.cannon.action = CannonActions::OnCooldown(Cannon::cooldown());
                     self.cannon.clock = 0.0;
                 }
@@ -126,54 +159,37 @@ impl RedGuy {
             CannonActions::Idle => {
                 stand_animation = ASSETS.cannon.get("idle");
                 barrel_animation = ASSETS.cannon_barrel.get("idle");
+                let switch_pos = self.cannon.pos + vec2(66.0, 72.0);
+
+                if is_key_pressed(KeyCode::E) && (player.pos.x - switch_pos.x).abs() < 100.0 {
+                    self.cannon.action = CannonActions::Shoot;
+                    self.cannon.clock = 0.0;
+                }
             }
         }
 
         stand_animation.play(self.cannon.pos, None);
         barrel_animation.play(
-            center + vec2(offset * angle.cos(), offset * angle.sin()),
+            center,
             Some(DrawTextureParams {
-                rotation: angle,
+                rotation: self.cannon.angle,
                 pivot: Some(center + vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0)),
 
                 ..Default::default()
             }),
         );
+        dbg!(&self.cannon.action);
         if self.cannon.action == CannonActions::Shoot
             && self.cannon.clock > ASSETS.cannon_barrel.get("shoot").get_duration() - 0.2
         {
-            let shoot_point = vec2(
-                center.x + -83.0 * angle.sin(),
-                center.y + 83.0 * angle.cos(),
-            );
-            let boss_center = vec2(
-                self.pos.x + ASSETS.red_boss.get_size().x,
-                self.pos.y + ASSETS.red_boss.get_size().y,
-            );
-            let lines = [
-                (Color::from_hex(0x99e65f), 2.0),
-                (Color::from_hex(0x99e65f), 8.0),
-                (Color::from_hex(0x99e65f), 2.0),
-            ];
-            let tot_width: f32 = lines.iter().map(|f| f.1).sum();
-            let begin_lines = shoot_point - vec2(tot_width / 2.0 * (angle).cos(), 0.0);
-            let mut width = 0.0;
-            for line in lines {
-                draw_line(
-                    begin_lines.x + angle.cos() * width,
-                    begin_lines.y + angle.sin(),
-                    boss_center.x,
-                    boss_center.y,
-                    line.1,
-                    line.0,
-                );
-                width += line.1
-            }
-        }
-        let switch_pos = self.pos + vec2(66.0, 72.0);
-        if is_key_pressed(KeyCode::E) && (player.pos.x - switch_pos.x).abs() < 100.0 {
-            self.cannon.action = CannonActions::Shoot;
-            self.cannon.clock = 0.0;
+            // draw_line(
+            //     shoot_point.x,
+            //     shoot_point.y,
+            //     boss_center.x,
+            //     boss_center.y,
+            //     8.0,
+            //     Color::from_hex(0xffeb57),
+            // );
         }
     }
 
@@ -284,12 +300,12 @@ impl Boss for RedGuy {
                 ) - vec2(0.0, ASSETS.cannon.get_size().y),
                 level,
             ),
-            incoming_rockets: Vec::new(),
+            incoming_rocket: None,
             fallings_enemeies: Vec::new(),
             attack_cooldowns: Vec::new(),
             catapult: load_pixel_map(&ASSETS.red_boss.get("catapult"), [61, 61, 61, 255]),
             crane: Self::get_crane(),
-            actions: vec![(RedGuyPhase::ShootRocket, 0.0)],
+            actions: vec![(RedGuyPhase::Entry, 0.0)],
             pos: to_game_pos(tile, level),
 
             allowed_area: (
@@ -306,6 +322,7 @@ impl Boss for RedGuy {
         projectiles: &mut Vec<Box<dyn Projectile>>,
         frame_time: f32,
         player: &Player,
+        particles: &mut Vec<Particle>,
     ) {
         let params = DrawTextureParams {
             dest_size: Some(ASSETS.red_boss.get_size() * 2.0),
@@ -335,8 +352,8 @@ impl Boss for RedGuy {
             f.1 += frame_time;
             match f.0 {
                 RedGuyPhase::ShootRocket => {
-                    self.incoming_rockets
-                        .push((self.pos + (vec2(38.0, 43.0) - vec2(3.0, 4.)) * 2.0, 0.0));
+                    self.incoming_rocket =
+                        Some((self.pos + (vec2(38.0, 43.0) - vec2(3.0, 4.)) * 2.0, 0.0));
 
                     return false;
                 }
@@ -359,21 +376,21 @@ impl Boss for RedGuy {
                 RedGuyPhase::Entry => {
                     if f.1 > 5.0 {
                         new_actions.push((
-                            RedGuyPhase::MoveTo(Self::new_location(self.allowed_area)),
+                            RedGuyPhase::MoveTo(Self::new_location(self.allowed_area), self.pos),
                             0.0,
                         ));
                         return false;
                     }
                 }
-                RedGuyPhase::MoveTo(point) => {
-                    if (self.pos - point).abs().element_sum() < 2.0 {
+                RedGuyPhase::MoveTo(destination, start) => {
+                    if (self.pos - destination).element_sum().abs() < 50.0 {
                         new_actions.push((
                             RedGuyPhase::Idle(self.pos - vec2(0.0, 20.0), gen_range(4.0, 9.0)),
                             0.0,
                         ));
                         return false;
                     } else {
-                        self.pos = self.pos.lerp(point, f.1 * frame_time)
+                        self.pos = start.lerp(destination, f.1 / 2.0)
                     }
                 }
 
@@ -488,12 +505,49 @@ impl Boss for RedGuy {
                 .play(draw_pos, Some(params.clone()));
         }
         self.update_cannon(frame_time, player);
+        if let Some(shot) = &mut self.cannon.shot {
+            dbg!(shot.pos);
+            let boss_size = ASSETS.red_boss.get_size();
+            if shot.pos.x > self.pos.x
+                && shot.pos.x < self.pos.x + boss_size.x
+                && shot.pos.y > self.pos.y
+                && shot.pos.y < self.pos.y + boss_size.y
+            {
+                particles.push(Particle::new(
+                    Box::new(|f| ASSETS.cannon_shot_particle.play(f, None)),
+                    particles::Lifetime::ByTime(ASSETS.cannon_shot_particle.get_duration()),
+                    None,
+                    vec2(shot.pos.x - ASSETS.cannon_shot_particle.get_size().x, 0.0),
+                ));
+                self.cannon.shot = None;
+            } else {
+                shot.past_pos.push(self.pos);
+                shot.pos +=
+                    ((self.pos + boss_size / 2.0) - shot.pos).normalize() * shot.speed * frame_time;
+
+                for (index, pos) in shot.past_pos.iter().enumerate() {
+                    if index == shot.past_pos.len() - 1 {
+                        break;
+                    }
+                    let next_pos = shot.past_pos[index + 1];
+                    draw_line(
+                        pos.x.ceil(),
+                        pos.y.ceil(),
+                        next_pos.x.ceil(),
+                        next_pos.y.ceil(),
+                        2.0,
+                        YELLOW,
+                    );
+                }
+            }
+        }
         self.fallings_enemeies.retain_mut(|enemy| {
             enemy.2 += frame_time;
-            let func = -(-170. * enemy.2.powi(2) + 261.5 * enemy.2) + enemy.1.y;
+            let func = -(-170. * enemy.2.powi(2) + 261.5 * enemy.2);
+            let heigth = func + enemy.1.y;
 
-            let pos = vec2(enemy.1.x, func);
-            if check_collision(pos, map) {
+            let pos = vec2(enemy.1.x, heigth);
+            if check_collision(pos, map) && func.is_sign_positive() {
                 let pos = vec2(pos.x, (pos.y / 16.0).floor() * 16.0 - 16.0);
                 enemies.push(enemy.0.spawn(pos, map));
                 return false;
@@ -503,7 +557,7 @@ impl Boss for RedGuy {
             return true;
         });
         self.actions.append(&mut new_actions);
-        self.incoming_rockets.retain_mut(|rocket| {
+        if let Some(mut rocket) = self.incoming_rocket {
             rocket.1 += frame_time;
             let animation = ASSETS.red_boss.get("rocket_enter");
             if rocket.1 > animation.get_duration() {
@@ -512,11 +566,10 @@ impl Boss for RedGuy {
                     Projectiles::Rocket,
                     None,
                 )));
-                return false;
+                self.incoming_rocket = None;
             } else {
                 animation.play_with_clock(rocket.0, rocket.1, None);
-                true
             }
-        });
+        }
     }
 }

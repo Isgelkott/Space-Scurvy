@@ -39,6 +39,7 @@ pub struct Assets {
     pub cannon: AnimationGroup,
     pub cannon_barrel: AnimationGroup,
     pub lever: AnimationGroup,
+    pub cannon_shot_particle: Animation,
 }
 
 impl Assets {
@@ -115,6 +116,9 @@ impl Assets {
                 load_ase_texture(include_bytes!("../assets/spritesheet.aseprite"), None, None),
             ),
             lever: load_animation_group(include_bytes!("../assets/lever.aseprite")),
+            cannon_shot_particle: load_animation(include_bytes!(
+                "../assets/laserparticle.aseprite"
+            )),
         }
     }
 }
