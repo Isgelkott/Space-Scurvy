@@ -2,11 +2,12 @@ use crate::{
     Game,
     assets::ASSETS,
     bosses::Bosses,
-    enemies::{ENEMY_IDS, Enemy, PresetEnemies, check_collision_with_size},
+    enemies::{ENEMY_IDS, PresetEnemies, check_collision_with_size},
     particles::ParticleGenerator,
     player::DeathCause,
     utils::{Animation, AnimationMethods},
 };
+use line_ending::LineEnding;
 use macroquad::prelude::*;
 use std::collections::HashMap;
 pub const TILE_SIZE: f32 = 16.0;
@@ -90,6 +91,7 @@ impl Tile {
 }
 pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), SpecialData, usize) {
     let mut special_data = SpecialData::default();
+    let tilemap = &LineEnding::normalize(tilemap);
     let tile_set_width = tileset
         .split_once("columns=\"")
         .unwrap()
@@ -182,17 +184,17 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), Specia
                 .unwrap();
 
             let chunk = chunk
-                .split_once("\r\n")
+                .split_once("\n")
                 .unwrap()
                 .1
-                .split_once("\r\n</")
+                .split_once("\n</")
                 .unwrap()
                 .0;
             let mut data = [0; 256];
 
             for (index, id) in chunk.split(",").enumerate() {
-                let id = if id.contains("\r\n") {
-                    &id.replace("\r\n", "")
+                let id = if id.contains("\n") {
+                    &id.replace("\n", "")
                 } else {
                     id
                 };
@@ -481,14 +483,14 @@ impl Level {
             for tile_data in tile.visual.iter() {
                 self.draw(tile_data, index);
             }
-            draw_rectangle(-400.0, -400.0, self.world_size.x + 400.0, 400.0, BLACK);
-            draw_rectangle(
-                -400.0,
-                self.world_size.y,
-                self.world_size.x + 400.0,
-                400.0,
-                BLACK,
-            );
+            // draw_rectangle(-400.0, -400.0, self.world_size.x + 400.0, 400.0, BLACK);
+            // draw_rectangle(
+            //     -400.0,
+            //     self.world_size.y,
+            //     self.world_size.x + 400.0,
+            //     400.0,
+            //     BLACK,
+            // );
         }
     }
 }
