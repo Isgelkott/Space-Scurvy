@@ -5,9 +5,10 @@ use macroquad::prelude::*;
 use crate::{
     assets::ASSETS,
     enemies,
-    level::{Level, MAP_SCALE_FACTOR, SpecialTileData, TILE_SIZE, VisualData},
+    level::{self, Level, MAP_SCALE_FACTOR, SpecialTileData, TILE_SIZE, VisualData},
     particles::{Particle, Particles},
     player::{DeathCause, Player},
+    projectiles::Projectile,
     utils::*,
 };
 pub static ENEMY_IDS: LazyLock<HashMap<usize, PresetEnemies>> = LazyLock::new(|| {
@@ -30,16 +31,6 @@ pub enum PresetEnemies {
     Fish,
 }
 impl PresetEnemies {
-    pub fn spawn(&self, pos: Vec2, map: &Level) -> Box<dyn Enemy> {
-        match &self {
-            Self::Jetpacker => Jetpacker::spawn(pos, map),
-            Self::SpikeBall => SpikeBall::spawn(pos, map),
-            Self::MachineGunner => MachineGunner::spawn(pos, map),
-            Self::FireWagon => FireWagon::spawn(pos, map),
-            Self::BombChain => BombChain::spawn(pos + TILE_SIZE / 2.0, map),
-            Self::Fish => Fish::spawn(pos, map),
-        }
-    }
     pub fn default_texture(&self) -> &Texture2D {
         match &self {
             Self::Jetpacker => ASSETS.jetpacker.default(),
@@ -48,6 +39,7 @@ impl PresetEnemies {
         }
     }
 }
+
 fn check_player_collision(pos: Vec2, size: Vec2, player: &Player) -> bool {
     let points = [(0.0, 0.0), (size.x, 0.0), (0.0, size.y), (size.x, size.y)];
 
@@ -88,7 +80,7 @@ fn check_projectile_collision<'a>(
     size: Vec2,
     map: &Level,
     player: &Player,
-    enemies: &'a mut Vec<Box<dyn Enemy>>,
+    enemies: &'a mut Vec<NewEnemy>,
 ) -> Option<CollisionType<'a>> {
     if check_player_collision(pos, size, player) {
         return Some(CollisionType::Player);
@@ -96,7 +88,7 @@ fn check_projectile_collision<'a>(
         return Some(CollisionType::Map);
     } else {
         for enemy in enemies {
-            let bounds = enemy.get_bounds();
+            let bounds = (enemy.pos, enemy.size);
             if check_collision_with_size((pos, size), bounds) {
                 return Some(CollisionType::Enemy(enemy));
             }
@@ -108,34 +100,32 @@ fn check_projectile_collision<'a>(
 pub enum CollisionType<'a> {
     Player,
     Map,
-    Enemy(&'a mut Box<dyn Enemy>),
+    Enemy(&'a mut NewEnemy),
 }
 impl<'a> CollisionType<'a> {
     fn is_same(&self, obj2: &Self) -> bool {
         std::mem::discriminant(self) == std::mem::discriminant(obj2)
     }
 }
-pub trait Projectile {
-    fn update(&mut self, player: &mut Player, map: &Level, frame_time: f32);
-    fn death_cause(&self) -> DeathCause {
-        DeathCause::Default
+pub fn update_enemies(
+    enemies: &mut Vec<NewEnemy>,
+    player: &Player,
+    map: &Level,
+    projectiles: &mut Vec<Projectile>,
+    frame_time: f32,
+) {
+    for enemy in enemies.iter_mut() {
+        enemy.beahavior.update(
+            &mut enemy.pos,
+            &mut enemy.size,
+            player,
+            map,
+            projectiles,
+            frame_time,
+        );
     }
-    fn particle(&self) -> Option<Particle> {
-        None
-    }
-    fn collision<'a>(
-        &self,
-        map: &Level,
-        player: &Player,
-        enemies: &'a mut Vec<Box<dyn Enemy>>,
-    ) -> Option<CollisionType<'a>>;
-    fn on_player_impact(&self, player: &mut Player) -> bool {
-        true
-    }
-    fn on_enemy_impact(&self, enemy: &mut dyn Enemy) {}
 }
 struct Fish {
-    pos: Vec2,
     origin: Vec2,
 
     size: Vec2,
@@ -144,84 +134,113 @@ struct Fish {
     attack_cooldown: f32,
     direction: f32,
 }
-impl Enemy for Fish {
-    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> Option<(Vec2, f32, u32)> {
-        Some((self.pos + self.size / 2.0, 400.0, 40))
-    }
-    fn get_bounds(&self) -> (Vec2, Vec2) {
-        (self.pos, self.size)
-    }
-    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
-    where
-        Self: Sized,
-    {
-        let mut start_x = to_world_pos(pos, map.width);
-        let mut end_x = start_x;
 
-        while map.tiles[start_x]
-            .special_data
-            .iter()
-            .any(|f| *f == SpecialTileData::Path)
-        {
-            start_x -= 1;
-        }
-        while map.tiles[end_x]
-            .special_data
-            .iter()
-            .any(|f| *f == SpecialTileData::Path)
-        {
-            end_x += 1;
-        }
-        Box::new(Self {
-            origin: pos,
-            direction: 60.0,
-            attack_clock: 0.0,
-            attack_cooldown: 0.0,
-            is_attacking: false,
-            pos,
-            size: ASSETS.fish.get_size(),
-        })
-    }
-
-    fn on_jumped_on_by_player(&self) -> bool {
-        false
-    }
+pub trait EnemyBehaviour {
     fn update(
         &mut self,
+        pos: &mut Vec2,
+        size: &mut Vec2,
         player: &Player,
         map: &Level,
-        projectiles: &mut Vec<Box<dyn Projectile>>,
+        projectiles: &mut Vec<Projectile>,
+        frame_time: f32,
+    );
+    fn new(pos: Vec2, level: &Level) -> Self
+    where
+        Self: Sized;
+}
+pub struct NewEnemy {
+    pub pos: Vec2,
+    pub size: Vec2,
+    beahavior: Box<dyn EnemyBehaviour>,
+}
+impl NewEnemy {
+    pub fn from(preset: PresetEnemies, pos: Vec2, level: &Level) -> Self {
+        let behaviour;
+        let size;
+        match preset {
+            PresetEnemies::Jetpacker => {
+                size = ASSETS.jetpacker.get_size();
+                behaviour = Box::new(Jetpacker::new(pos, level));
+            }
+            _ => panic!(),
+        };
+        Self {
+            pos,
+            size,
+            beahavior: behaviour,
+        }
+    }
+}
+impl EnemyBehaviour for Fish {
+    fn new(pos: Vec2, map: &Level) -> Self {
+        {
+            let mut start_x = to_world_pos(pos, map.width);
+            let mut end_x = start_x;
+
+            while map.tiles[start_x]
+                .special_data
+                .iter()
+                .any(|f| *f == SpecialTileData::Path)
+            {
+                start_x -= 1;
+            }
+            while map.tiles[end_x]
+                .special_data
+                .iter()
+                .any(|f| *f == SpecialTileData::Path)
+            {
+                end_x += 1;
+            }
+            Self {
+                origin: pos,
+                direction: 60.0,
+                attack_clock: 0.0,
+                attack_cooldown: 0.0,
+                is_attacking: false,
+
+                size: ASSETS.fish.get_size(),
+            }
+        }
+    }
+
+    fn update(
+        &mut self,
+        pos: &mut Vec2,
+        size: &mut Vec2,
+        player: &Player,
+        map: &Level,
+        projectiles: &mut Vec<Projectile>,
         frame_time: f32,
     ) {
         self.attack_cooldown -= frame_time;
-        if self.pos.y > self.origin.y {
+        if pos.y > self.origin.y {
             self.is_attacking = false;
             self.attack_clock = 0.0;
-            self.pos.y = self.origin.y;
+            pos.y = self.origin.y;
         }
 
         if self.is_attacking {
             self.attack_clock += frame_time;
 
-            self.pos.y =
-                self.origin.y + 64.0 * self.attack_clock.powi(2) - 128.0 * self.attack_clock;
+            pos.y = self.origin.y + 64.0 * self.attack_clock.powi(2) - 128.0 * self.attack_clock;
 
             let rotation = if (128.0 * self.attack_clock - 128.0).is_sign_positive() {
                 PI
             } else {
                 0.0
             };
-            let shader = self.pos.y + self.size.y > self.origin.y;
+            let shader = pos.y + self.size.y > self.origin.y;
             if shader {
                 FISH_MATERIAL.set_uniform(
                     "acidy",
                     if rotation == 0.0 { -1.0 } else { 1.0 }
-                        - (self.origin.y - self.pos.y) / self.size.y,
+                        - (self.origin.y - pos.y) / self.size.y,
                 );
                 gl_use_material(&FISH_MATERIAL);
             }
             ASSETS.fish.get("jump").play(
-                self.pos,
+                *pos,
                 Some(DrawTextureParams {
                     rotation,
                     ..Default::default()
@@ -234,7 +253,7 @@ impl Enemy for Fish {
             'wa: {
                 let tile = to_world_pos(
                     vec2(
-                        self.pos.x
+                        pos.x
                             + self.direction * frame_time
                             + if self.direction.is_sign_positive() {
                                 self.size.x
@@ -246,14 +265,14 @@ impl Enemy for Fish {
                     map.width,
                 );
 
-                if (player.pos.x - (self.pos.x + self.size.x)).abs() < 20.0
+                if (player.pos.x - (pos.x + self.size.x)).abs() < 20.0
                     && self.attack_cooldown <= 0.0
                 {
                     dbg!("attacking");
                     self.is_attacking = true;
                     self.attack_cooldown = 5.0;
                 } else {
-                    ASSETS.fish.get("bubbles").play(self.pos, None);
+                    ASSETS.fish.get("bubbles").play(*pos, None);
                     if tile + 1 > map.tiles.len() {
                         dbg!("out of bounds fish");
                         break 'wa;
@@ -266,277 +285,36 @@ impl Enemy for Fish {
                         dbg!("beep bepp");
                         self.direction *= -1.0;
                     } else {
-                        self.pos.x += self.direction * frame_time;
+                        pos.x += self.direction * frame_time;
                     }
                 }
             }
         }
     }
 }
-pub struct Bullet {
-    pos: Vec2,
-    direction: Vec2,
-    speed: f32,
-    origin: Vec2,
-}
-impl Bullet {
-    pub fn new(pos: Vec2, direction: Vec2) -> Self {
-        Self {
-            pos,
-            direction,
-            speed: 500.0,
-            origin: pos,
-        }
-    }
-}
-impl Projectile for Bullet {
-    fn on_enemy_impact(&self, enemy: &mut dyn Enemy) {
-        enemy.on_hit_by_player();
-    }
-    fn on_player_impact(&self, _player: &mut Player) -> bool {
-        false
-    }
-    fn collision<'a>(
-        &self,
-        map: &Level,
-        player: &Player,
-        enemies: &'a mut Vec<Box<dyn Enemy>>,
-    ) -> Option<CollisionType<'a>> {
-        let collision = check_projectile_collision(self.pos, Vec2::ZERO, map, player, enemies);
-        return collision;
-    }
 
-    fn update(&mut self, _player: &mut Player, map: &Level, frame_time: f32) {
-        self.pos += self.direction * self.speed * frame_time;
-        gl_use_material(&BULLET_MATERIAL);
-        BULLET_MATERIAL.set_uniform("alpha", 1.0 / (self.pos.x - self.origin.x).abs().powf(1.5));
-        draw_rectangle(
-            self.origin.x,
-            self.origin.y,
-            self.pos.x - self.origin.x,
-            2.0,
-            BLACK,
-        );
-        gl_use_default_material();
-    }
-}
-pub struct EnergyBall {
-    animation: &'static Animation,
-    velocity: Vec2,
-    pos: Vec2,
-    size: Vec2,
-}
-impl EnergyBall {
-    fn new(pos: Vec2, direction: Vec2) -> Self {
-        Self {
-            animation: &ASSETS.energy_ball,
-            velocity: 80.0 * direction,
-            pos,
-            size: vec2(16.0, 16.0),
-        }
-    }
-}
-
-impl Projectile for EnergyBall {
-    fn on_player_impact(&self, player: &mut Player) -> bool {
-        player.damage(Some(25), DeathCause::Energy);
-        player.knockback(self.pos + self.size / 2.0, 900.0);
-        return true;
-    }
-    fn death_cause(&self) -> DeathCause {
-        DeathCause::Energy
-    }
-    fn particle(&self) -> Option<Particle> {
-        Some(Particle::new(
-            Box::new(|f| {
-                ASSETS.energy_ball_shatter.play(f, None);
-            }),
-            crate::particles::Lifetime::ByTime(ASSETS.energy_ball_shatter.1 as f32 / 1000.0),
-            None,
-            self.pos,
-        ))
-    }
-    fn collision<'a>(
-        &self,
-        map: &Level,
-        player: &Player,
-        enemies: &'a mut Vec<Box<dyn Enemy + 'static>>,
-    ) -> Option<CollisionType<'a>> {
-        if check_player_collision(self.pos, self.size, player) {
-            return Some(CollisionType::Player);
-        } else if check_map_collision(self.pos, self.size, map) {
-            return Some(CollisionType::Map);
-        } else {
-            return None;
-        }
-    }
-
-    fn update(&mut self, player: &mut Player, map: &Level, frame_time: f32)
-    where
-        Self: Sized,
-    {
-        self.animation.play(self.pos, None);
-        self.pos += self.velocity * frame_time;
-        if check_player_collision(self.pos, self.size, player) {
-            player.damage(Some(20), DeathCause::Energy);
-        }
-    }
-}
-pub enum Projectiles {
-    Rocket,
-    EnergyBall,
-}
-pub enum ProjectileBehaviour {
-    FollowPlayer,
-}
-pub struct StandardProjectile {
-    pub pos: Vec2,
-    pub size: Vec2,
-    pub direction: Vec2,
-    pub speed: f32,
-    pub draw: Box<dyn Fn(Vec2, Vec2, f32)>,
-    pub behaviour: Option<ProjectileBehaviour>,
-    pub damage: u32,
-    pub death_cause: DeathCause,
-    pub particle: Option<Particles>,
-}
-impl StandardProjectile {
-    pub fn from(pos: Vec2, projectile: Projectiles, direction: Option<Vec2>) -> Self {
-        let direction = direction.unwrap_or(Vec2::ZERO);
-        match projectile {
-            Projectiles::Rocket => StandardProjectile {
-                particle: Some(Particles::Explosion),
-                behaviour: Some(enemies::ProjectileBehaviour::FollowPlayer),
-                pos,
-                size: ASSETS.rocket.get_size(),
-                damage: 200,
-                direction: Vec2::ZERO,
-                speed: 120.0,
-                draw: Box::new(|pos, size, rotation| {
-                    ASSETS.rocket.get("fly").play(
-                        pos,
-                        Some(DrawTextureParams {
-                            rotation,
-                            pivot: Some(pos + size / 2.0),
-                            ..Default::default()
-                        }),
-                    )
-                }),
-                death_cause: DeathCause::Explode,
-            },
-            Projectiles::EnergyBall => Self {
-                pos,
-                size: ASSETS.energy_ball.get_size(),
-                damage: 20,
-                draw: Box::new(|pos, size, rotation| {
-                    ASSETS.energy_ball.play(pos, None);
-                }),
-                speed: 40.0,
-                direction,
-                behaviour: Some(ProjectileBehaviour::FollowPlayer),
-                death_cause: DeathCause::Energy,
-                particle: Some(Particles::EnergyBallShatter),
-            },
-        }
-    }
-}
-impl Projectile for StandardProjectile {
-    fn on_player_impact(&self, player: &mut Player) -> bool {
-        player.damage(Some(self.damage), self.death_cause);
-        return true;
-    }
-
-    fn update(&mut self, player: &mut Player, _map: &Level, frame_time: f32) {
-        if let Some(behavoiour) = &self.behaviour {
-            match behavoiour {
-                ProjectileBehaviour::FollowPlayer => {
-                    self.direction += ((player.pos + player.size / 2.0)
-                        - (self.pos + self.size / 2.0))
-                        .normalize()
-                        * self.speed;
-                }
-            }
-        }
-        self.pos += self.direction.normalize_or_zero() * self.speed * frame_time;
-
-        (self.draw)(self.pos, self.size, self.direction.to_angle());
-    }
-    fn collision<'a>(
-        &self,
-        map: &Level,
-        player: &Player,
-        enemies: &'a mut Vec<Box<dyn Enemy>>,
-    ) -> Option<CollisionType<'a>> {
-        let collision = check_projectile_collision(self.pos, self.size, map, player, enemies);
-        if let Some(collision) = &collision {
-            if let CollisionType::Enemy(enemy) = collision {
-                return None;
-            }
-        }
-        return collision;
-    }
-}
-
-pub trait Enemy {
-    fn on_jumped_on_by_player(&self) -> bool {
-        return true;
-    }
-    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> Option<(Vec2, f32, u32)> {
-        let bounds = self.get_bounds();
-        Some((self.get_bounds().0 + self.get_bounds().1 / 2.0, 400.0, 10))
-    }
-    fn get_bounds(&self) -> (Vec2, Vec2);
-    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
-    where
-        Self: Sized;
-
-    fn update(
-        &mut self,
-        player: &Player,
-        map: &Level,
-        projectiles: &mut Vec<Box<dyn Projectile>>,
-        frame_time: f32,
-    );
-    fn on_hit_by_player(&mut self) {}
-}
 struct FireWagon {
-    pos: Vec2,
-    size: Vec2,
     direction: Vec2,
     speed: f32,
 }
-impl Enemy for FireWagon {
-    fn get_bounds(&self) -> (Vec2, Vec2) {
-        (self.pos, self.size)
+impl EnemyBehaviour for FireWagon {
+    fn new(pos: Vec2, level: &Level) -> Self {
+        panic!()
     }
 
-    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> Option<(Vec2, f32, u32)> {
-        let bounds = self.get_bounds();
-        Some((bounds.0 + bounds.1 / 2.0, 850.0, 20))
-    }
-    fn on_hit_by_player(&mut self) {}
-    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
-    where
-        Self: Sized,
-    {
-        Box::new(Self {
-            pos,
-            size: Vec2::ZERO,
-            direction: vec2(1.0, 0.0),
-            speed: 100.0,
-        })
-    }
     fn update(
         &mut self,
+        pos: &mut Vec2,
+        size: &mut Vec2,
         player: &Player,
         map: &Level,
-        _projectiles: &mut Vec<Box<dyn Projectile>>,
+        projectiles: &mut Vec<Projectile>,
         frame_time: f32,
     ) {
         for i in 0..2 {
             let i = i as f32 * 16.0;
             if check_collision(
-                self.pos + vec2(i, 0.0) + self.direction * self.speed * frame_time,
+                *pos + vec2(i, 0.0) + self.direction * self.speed * frame_time,
                 map,
             ) {
                 self.direction.x *= -1.0;
@@ -546,80 +324,55 @@ impl Enemy for FireWagon {
             flip_x: self.direction.x.is_sign_negative(),
             ..Default::default()
         });
-        let diff = (player.pos.x + player.size.x / 2.0) - (self.pos.x + self.size.x / 2.0);
+        let diff = (player.pos.x + player.size.x / 2.0) - (pos.x + size.x / 2.0);
         if diff.signum() == self.direction.x.signum() && diff.abs() < 35.0 {
             let animation = ASSETS.fire_wagon.get("fire");
-            animation.play(self.pos, params.clone());
-            self.size = animation.get_size();
+            animation.play(*pos, params.clone());
+            *size = animation.get_size();
         } else {
-            ASSETS
-                .fire_wagon
-                .get("jiggle")
-                .play(self.pos, params.clone());
-            self.size = vec2(11.0, 15.0)
+            ASSETS.fire_wagon.get("jiggle").play(*pos, params.clone());
+            *size = vec2(11.0, 15.0)
         }
-        ASSETS.fire_wagon.get("drive").play(self.pos, params);
-        self.pos += self.direction * self.speed * frame_time;
+        ASSETS.fire_wagon.get("drive").play(*pos, params);
+        *pos += self.direction * self.speed * frame_time;
     }
 }
 struct BombChain {
-    origin: Vec2,
     bomb_pos: Vec2,
     rotation: f32,
-    chain: &'static Texture2D,
     has_bomb: bool,
-    bomb: &'static Texture2D,
+    origin: Vec2,
 }
-impl Enemy for BombChain {
-    fn get_bounds(&self) -> (Vec2, Vec2) {
-        (self.bomb_pos, self.bomb.size())
-    }
-    fn on_jumped_on_by_player(&self) -> bool {
-        return false;
-    }
-    fn on_player_contact(&mut self, particles: &mut Vec<Particle>) -> Option<(Vec2, f32, u32)> {
-        if self.has_bomb {
-            self.has_bomb = false;
-            particles.push(Particle::new(
-                Box::new(|f| ASSETS.bomb_explode.play(f, None)),
-                crate::particles::Lifetime::ByTime(ASSETS.bomb_explode.get_duration()),
-                None,
-                self.bomb_pos + self.bomb.size() / 2.0 - ASSETS.bomb_explode.get_size() / 2.0,
-            ));
-            let bounds = self.get_bounds();
-            Some((bounds.0 + bounds.1 / 2.0, 600., 40))
-        } else {
-            None
-        }
-    }
-    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
+impl EnemyBehaviour for BombChain {
+    fn new(pos: Vec2, level: &Level) -> Self
     where
         Self: Sized,
     {
-        Box::new(Self {
-            bomb_pos: Vec2::ZERO,
-            bomb: &ASSETS.bomb,
-            chain: &ASSETS.bomb_chain,
-            origin: pos,
-            has_bomb: true,
+        Self {
             rotation: 0.0,
-        })
+            bomb_pos: Vec2::ZERO,
+            has_bomb: true,
+            origin: pos,
+        }
     }
 
     fn update(
         &mut self,
+        pos: &mut Vec2,
+        size: &mut Vec2,
         player: &Player,
         map: &Level,
-        projectiles: &mut Vec<Box<dyn Projectile>>,
+        projectiles: &mut Vec<Projectile>,
         frame_time: f32,
     ) {
         self.rotation += 5.0 * frame_time;
+        let bomb = &ASSETS.bomb_chain;
         self.bomb_pos = self.origin
-            + (self.chain.width() + self.bomb.height() * 0.55)
+            + (ASSETS.bomb_chain.width() + bomb.height() * 0.55)
                 * vec2((self.rotation).cos(), (self.rotation).sin())
-            - self.bomb.size() / 2.0;
+            - *size / 2.0;
         draw_texture_ex(
-            self.chain,
+            &ASSETS.bomb_chain,
             self.origin.x,
             self.origin.y,
             WHITE,
@@ -631,13 +384,13 @@ impl Enemy for BombChain {
         );
         if self.has_bomb {
             draw_texture_ex(
-                self.bomb,
+                &ASSETS.bomb,
                 self.bomb_pos.x,
                 self.bomb_pos.y,
                 WHITE,
                 DrawTextureParams {
                     rotation: self.rotation + PI / 2.0,
-                    pivot: (Some(self.bomb_pos + self.bomb.size() / 2.0)),
+                    pivot: (Some(self.bomb_pos + ASSETS.bomb.size() / 2.0)),
                     ..Default::default()
                 },
             );
@@ -652,63 +405,26 @@ struct MachineGunner {
     flipped: bool,
     hit: bool,
 }
-impl Enemy for MachineGunner {
-    fn on_hit_by_player(&mut self) {
-        self.hit = true;
-        self.hit_clock = 3.0;
-    }
-    fn get_bounds(&self) -> (Vec2, Vec2) {
-        (self.pos, self.size)
-    }
-    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
+impl EnemyBehaviour for MachineGunner {
+    fn new(pos: Vec2, level: &Level) -> Self
     where
         Self: Sized,
     {
-        Box::new(Self {
-            flipped: false,
-            size: ASSETS.machine_gunner.get_size(),
-            pos,
-            shoot_clock: 0.0,
-            hit_clock: 0.0,
-            hit: false,
-        })
+        panic!()
     }
     fn update(
         &mut self,
+        pos: &mut Vec2,
+        size: &mut Vec2,
         player: &Player,
         map: &Level,
-        projectiles: &mut Vec<Box<dyn Projectile>>,
+        projectiles: &mut Vec<Projectile>,
         frame_time: f32,
     ) {
         if !self.hit {
             self.flipped = player.pos.x > self.pos.x;
             if self.shoot_clock >= 0.4 {
-                projectiles.push(Box::new(StandardProjectile {
-                    particle: None,
-                    behaviour: Some(ProjectileBehaviour::FollowPlayer),
-                    pos: self.pos
-                        + if self.flipped {
-                            vec2(-8.5 + self.size.x, 15.0)
-                        } else {
-                            vec2(-8.5, 15.0)
-                        },
-                    size: ASSETS.laser.get_size(),
-                    direction: ((player.pos + player.size / 2.0) - (self.pos + self.size.y / 2.0))
-                        .normalize_or_zero(),
-
-                    speed: 40.0,
-                    death_cause: DeathCause::Default,
-                    damage: 2,
-                    draw: Box::new(|pos, size, rotation| {
-                        ASSETS.laser.play(
-                            pos,
-                            Some(DrawTextureParams {
-                                rotation,
-                                ..Default::default()
-                            }),
-                        )
-                    }),
-                }));
+                // shoot
                 self.shoot_clock = 0.0;
             } else {
                 self.shoot_clock += frame_time;
@@ -736,34 +452,20 @@ impl Enemy for MachineGunner {
         }
     }
 }
-struct SpikeBall {
-    pos: Vec2,
-    size: Vec2,
-}
-impl Enemy for SpikeBall {
-    fn get_bounds(&self) -> (Vec2, Vec2) {
-        (self.pos, self.size)
-    }
-    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
-    where
-        Self: Sized,
-    {
-        Box::new(Self {
-            pos,
-            size: ASSETS.spike_ball.get_size(),
-        })
-    }
-    fn update(
-        &mut self,
-        player: &Player,
-        map: &Level,
-        projectiles: &mut Vec<Box<dyn Projectile>>,
-        frame_time: f32,
-    ) {
-        self.pos += (player.pos - self.pos).normalize() * 10.0 * frame_time;
-        let _ = &ASSETS.spike_ball.get("4").play(self.pos, None);
-    }
-}
+
+// impl EnemyBehaviour for SpikeBall {
+//     fn new(pos: Vec2, level: &Level) -> Self {}
+//     fn update(
+//         &mut self,
+//         player: &Player,
+//         map: &Level,
+//         projectiles: &mut Vec<Projectile>,
+//         frame_time: f32,
+//     ) {
+//         self.pos += (player.pos - self.pos).normalize() * 10.0 * frame_time;
+//         let _ = &ASSETS.spike_ball.get("4").play(self.pos, None);
+//     }
+// }
 #[derive(Debug, PartialEq)]
 enum JetpackerState {
     Normal,
@@ -773,32 +475,16 @@ enum JetpackerState {
     Fall,
 }
 struct Jetpacker {
-    size: Vec2,
     origin: Vec2,
     attacked: bool,
     flipped: bool,
     behavior_curve: [(f32, f32, &'static Animation, bool); 6],
     state: (JetpackerState, f32),
     fall_velocity: f32,
-    pos: Vec2,
 }
 
-impl Enemy for Jetpacker {
-    fn get_bounds(&self) -> (Vec2, Vec2) {
-        if self.state.0 == JetpackerState::Lie || self.state.0 == JetpackerState::Hit {
-            return (vec2(self.pos.x, self.pos.y + 10.0), self.size);
-        }
-        (self.pos, self.size)
-    }
-    fn on_hit_by_player(&mut self) {
-        if self.state.0 != JetpackerState::Lie {
-            self.state = (JetpackerState::Hit, 0.0);
-        }
-    }
-    fn spawn(pos: Vec2, map: &Level) -> Box<dyn Enemy>
-    where
-        Self: Sized,
-    {
+impl EnemyBehaviour for Jetpacker {
+    fn new(pos: Vec2, map: &Level) -> Self {
         let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
         let mut tile = (map_pos.y as usize + 2) * map.width as usize + map_pos.x as usize;
         let ground_animation = if map.tiles[tile].collision {
@@ -830,28 +516,29 @@ impl Enemy for Jetpacker {
             (flight_time + 4.0 + 1.5, fly_height, animation, false),
             (flight_time + 5.0 + 1.5, 0.0, animation, false),
         ];
-        Box::new(Self {
+        Self {
             state: (JetpackerState::Normal, 0.0),
-            size: ASSETS.jetpacker.get("fly").get_size(),
             fall_velocity: 0.0,
 
             behavior_curve: curve,
             flipped: false,
             attacked: false,
             origin: pos,
-            pos: pos,
-        })
+        }
     }
+
     fn update(
         &mut self,
+        pos: &mut Vec2,
+        size: &mut Vec2,
         player: &Player,
         map: &Level,
-        projectiles: &mut Vec<Box<dyn Projectile>>,
+        projectiles: &mut Vec<Projectile>,
         frame_time: f32,
     ) {
         self.state.1 += frame_time;
-        if self.pos.y > self.origin.y {
-            self.pos = self.origin;
+        if pos.y > self.origin.y {
+            *pos = self.origin;
             self.fall_velocity = 0.0;
             self.state = (JetpackerState::Lie, 0.0);
         }
@@ -865,33 +552,25 @@ impl Enemy for Jetpacker {
                 ASSETS
                     .jetpacker
                     .get("fall")
-                    .play(self.pos, Some(params.clone()));
+                    .play(*pos, Some(params.clone()));
             }
             JetpackerState::Getup => {
                 let animation = ASSETS.jetpacker.get("getup");
-                animation.play_with_clock(self.pos, self.state.1, Some(params.clone()));
+                animation.play_with_clock(*pos, self.state.1, Some(params.clone()));
                 if self.state.1 > animation.1 as f32 / 1000.0 {
                     self.state = (JetpackerState::Normal, 0.0)
                 }
             }
             JetpackerState::Hit => {
-                self.flipped = if player.pos.x > self.origin.x {
-                    true
-                } else {
-                    false
-                };
+                self.flipped = if pos.x > self.origin.x { true } else { false };
                 let animation = ASSETS.jetpacker.get("hit");
-                animation.play_with_clock(self.pos, self.state.1, Some(params.clone()));
+                animation.play_with_clock(*pos, self.state.1, Some(params.clone()));
                 if self.state.1 > animation.1 as f32 / 1000.0 {
                     self.state = (JetpackerState::Fall, 0.0)
                 }
             }
             JetpackerState::Normal => {
-                self.flipped = if player.pos.x > self.origin.x {
-                    true
-                } else {
-                    false
-                };
+                self.flipped = pos.x > self.origin.x;
 
                 if self.state.1 + frame_time > self.behavior_curve.last().unwrap().0 {
                     self.state.1 = 0.0;
@@ -902,14 +581,14 @@ impl Enemy for Jetpacker {
                 for p in self.behavior_curve.iter().rev() {
                     if time >= p.0 {
                         let k = (last.1 - p.1) / (last.0 - p.0);
-                        self.pos = vec2(
+                        *pos = vec2(
                             self.origin.x,
                             self.origin.y
                                 + if !k.is_infinite() { k } else { 0.0 } * (time - p.0)
                                 + p.1,
                         );
                         p.2.play(
-                            self.pos,
+                            *pos,
                             Some(DrawTextureParams {
                                 flip_x: self.flipped,
                                 ..Default::default()
@@ -917,17 +596,17 @@ impl Enemy for Jetpacker {
                         );
                         if p.3 && !self.attacked {
                             self.attacked = true;
-                            projectiles.push(Box::new(EnergyBall::new(
-                                self.pos
-                                    + if self.flipped {
-                                        vec2(10.0, 0.0)
-                                    } else {
-                                        vec2(-10.0, 0.0)
-                                    }
-                                    + vec2(0.0, 5.0),
-                                ((player.pos + player.size / 2.0) - (self.pos + self.size / 2.0))
-                                    .normalize_or_zero(),
-                            )));
+                            // projectiles.push(Box::new(EnergyBall::new(
+                            //     *pos
+                            //         + if self.flipped {
+                            //             vec2(10.0, 0.0)
+                            //         } else {
+                            //             vec2(-10.0, 0.0)
+                            //         }
+                            //         + vec2(0.0, 5.0),
+                            //     ((*pos + player.size / 2.0) - (*pos + self.size / 2.0))
+                            //         .normalize_or_zero(),
+                            // )));
                         }
                         break;
                     } else {
@@ -938,55 +617,12 @@ impl Enemy for Jetpacker {
             JetpackerState::Lie => {
                 let animation = ASSETS.jetpacker.get("fall");
 
-                animation.play(self.pos + vec2(0.0, 4.0), Some(params.clone()));
+                animation.play(*pos + vec2(0.0, 4.0), Some(params.clone()));
                 if self.state.1 > animation.1 as f32 / 1000.0 {
                     self.state = (JetpackerState::Getup, 0.0)
                 }
             }
-        }
-
-        self.pos.y += self.fall_velocity * frame_time;
+        };
+        pos.y += self.fall_velocity * frame_time;
     }
-}
-pub fn update_enemies(
-    player: &Player,
-    enemies: &mut Vec<Box<dyn Enemy>>,
-    map: &Level,
-    projectiles: &mut Vec<Box<dyn Projectile>>,
-    frame_time: f32,
-) {
-    for enemy in enemies.iter_mut() {
-        enemy.update(player, map, projectiles, frame_time);
-    }
-}
-pub fn update_projectiles(
-    player: &mut Player,
-    level: &Level,
-    projectiles: &mut Vec<Box<dyn Projectile>>,
-    particles: &mut Vec<Particle>,
-    enemies: &mut Vec<Box<dyn Enemy>>,
-    frame_time: f32,
-) {
-    projectiles.retain_mut(|f| {
-        if let Some(collision) = f.collision(level, player, enemies) {
-            if let Some(particle) = f.particle() {
-                particles.push(particle)
-            }
-            if collision.is_same(&CollisionType::Player) {
-                if f.on_player_impact(player) {
-                    return false;
-                }
-            } else if collision.is_same(&CollisionType::Map) {
-                return false;
-            } else {
-                if let CollisionType::Enemy(enemy) = collision {
-                    enemy.on_hit_by_player();
-                    return false;
-                }
-            }
-        }
-
-        f.update(player, level, frame_time);
-        return true;
-    });
 }

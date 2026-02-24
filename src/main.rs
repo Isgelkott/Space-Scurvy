@@ -11,6 +11,8 @@ use crate::{
     background::Background,
     bosses::Boss,
     particles::{Particle, update_particle_generators, update_particles},
+    projectiles::Projectile,
+    utils::{AnimationMethods, HP_MATERIAL, create_camera},
 };
 mod assets;
 mod background;
@@ -19,8 +21,14 @@ mod enemies;
 mod level;
 mod particles;
 mod player;
+mod projectiles;
+
 mod utils;
 const SCREEN_SIZE: (f32, f32) = (300.0, 200.0);
+struct CameraHolder {
+    camera: Camera2D,
+    pos: Vec2,
+}
 
 pub struct Game {
     win: bool,
@@ -29,16 +37,29 @@ pub struct Game {
     map: Level,
     backgrounds: Background,
     player: Player,
-    camera: Camera2D,
-    enemies: Vec<Box<dyn Enemy>>,
+    camera: CameraHolder,
+    enemies: Vec<NewEnemy>,
     boss: Option<Box<dyn Boss>>,
     pickups: Vec<Pickup>,
-    projectiles: Vec<Box<dyn Projectile>>,
+    projectiles: Vec<Projectile>,
     particles: Vec<Particle>,
     // map_animations: Vec<MapAnimation>,
     map_animations: Vec<MapAnimation>,
 }
 impl Game {
+    fn update_camera(&mut self) {
+        const FORESIGHT: f32 = 10.0;
+        const MAX_FORESIGHT: f32 = FORESIGHT * 2.5;
+        const SPEED: f32 = 1.0;
+        let desired_pos = (self.player.pos.x + self.player.velocity.x * FORESIGHT);
+        if (self.camera.pos.x - desired_pos).abs() > 10.0 {
+            let update = (desired_pos - self.camera.pos.x).signum() * SPEED;
+            self.camera.pos.x = (self.camera.pos.x + update).clamp(
+                (self.player.pos.x - MAX_FORESIGHT),
+                (self.player.pos.x + MAX_FORESIGHT),
+            );
+        }
+    }
     fn draw_hud(&self) {
         set_default_camera();
 
@@ -60,14 +81,15 @@ impl Game {
             );
         }
         gl_use_default_material();
-        set_camera(&self.camera);
+        set_camera(&self.camera.camera);
     }
 
     fn new(level: Levels) -> Self {
         let (map, special_data) = Level::new(level);
         let mut enemies = Vec::new();
         for enemy in special_data.enemies.iter() {
-            enemies.push(enemy.0.spawn(enemy.1, &map))
+            dbg!(enemy);
+            enemies.push(NewEnemy::from(enemy.0, enemy.1, &map))
         }
         Self {
             boss: if let Some((boss, tile)) = special_data.boss {
@@ -87,7 +109,10 @@ impl Game {
             enemies,
             map,
             player: Player::new(special_data.spawn_location),
-            camera: create_camera(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1)),
+            camera: CameraHolder {
+                camera: create_camera(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1)),
+                pos: special_data.spawn_location,
+            },
         }
     }
     fn draw_camera(&mut self) {
@@ -98,7 +123,7 @@ impl Game {
             .min(screen_height() / SCREEN_SIZE.1)
             .floor();
         draw_texture_ex(
-            &self.camera.render_target.as_ref().unwrap().texture,
+            &self.camera.camera.render_target.as_ref().unwrap().texture,
             0.0,
             0.0,
             WHITE,
@@ -162,14 +187,14 @@ impl Game {
         self.map.draw_level();
         update_map_animations(&mut self.map_animations);
 
-        update_projectiles(
-            &mut self.player,
-            &self.map,
-            &mut self.projectiles,
-            &mut self.particles,
-            &mut self.enemies,
-            frame_time,
-        );
+        // update_projectiles(
+        //     &mut self.player,
+        //     &self.map,
+        //     &mut self.projectiles,
+        //     &mut self.particles,
+        //     &mut self.enemies,
+        //     frame_time,
+        // );
 
         if !self.win && !self.die {
             self.player.update(
@@ -179,31 +204,27 @@ impl Game {
                 &mut self.particles,
                 frame_time,
             );
+            self.update_camera();
         }
         #[cfg(debug_assertions)]
         {
             if is_key_down(KeyCode::B) {
                 dbg!(self.player.pos);
             }
+            if is_key_down(KeyCode::Minus) {
+                dbg!(self.camera.pos);
+            }
         }
-        self.camera.target = self.player.pos - vec2(0.0, 40.0);
-        draw_rectangle(
-            SCREEN_SIZE.0 - 10.0,
-            SCREEN_SIZE.1 - 10.0,
-            10.0,
-            10.0,
-            WHITE,
-        );
-        draw_rectangle(0.0, 0.0, 10.0, 10.0, RED);
+        self.camera.camera.target = self.camera.pos;
+
         update_pickups(self);
         update_enemies(
-            &self.player,
             &mut self.enemies,
-            &self.map,
+            &mut self.player,
+            &mut self.map,
             &mut self.projectiles,
             frame_time,
         );
-
         update_particle_generators(&mut self.map.tiles, &mut self.particles, frame_time);
         update_particles(&mut self.particles, frame_time);
         self.death();
@@ -255,7 +276,7 @@ impl GameManger {
         }
     }
     async fn update(&mut self) {
-        set_camera(&self.game.camera);
+        set_camera(&self.game.camera.camera);
         if self.game.die {
             self.die_screen();
         } else {

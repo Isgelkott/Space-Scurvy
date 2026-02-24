@@ -4,13 +4,11 @@ use macroquad::{prelude::*, rand::gen_range};
 
 use crate::{
     assets::ASSETS,
-    enemies::{
-        Enemy, PresetEnemies, Projectile, Projectiles, StandardProjectile,
-        check_collision_with_size,
-    },
-    level::{Level, SpecialData, SpecialTileData, TILE_SIZE},
+    enemies::{NewEnemy, PresetEnemies},
+    level::{Level, SpecialTileData, TILE_SIZE},
     particles::{self, Particle},
-    player::{self, Player},
+    player::Player,
+    projectiles::Projectile,
     utils::*,
 };
 fn find_special_tile_data(level: &Level, data: SpecialTileData) -> Vec2 {
@@ -42,8 +40,8 @@ pub trait Boss {
     fn update(
         &mut self,
         map: &Level,
-        enemies: &mut Vec<Box<dyn Enemy>>,
-        projectiles: &mut Vec<Box<dyn Projectile>>,
+        enemies: &mut Vec<NewEnemy>,
+        projectiles: &mut Vec<Projectile>,
         time: f32,
         player: &Player,
         particles: &mut Vec<Particle>,
@@ -327,8 +325,8 @@ impl Boss for RedGuy {
     fn update(
         &mut self,
         map: &Level,
-        enemies: &mut Vec<Box<dyn Enemy>>,
-        projectiles: &mut Vec<Box<dyn Projectile>>,
+        enemies: &mut Vec<NewEnemy>,
+        projectiles: &mut Vec<Projectile>,
         frame_time: f32,
         player: &Player,
         particles: &mut Vec<Particle>,
@@ -480,8 +478,9 @@ impl Boss for RedGuy {
                         f.1,
                         Some(params.clone()),
                     );
-                    let text = enemy.default_texture();
-                    let size = text.size() / 1.5 + ((f.1 / duration) * text.size() / 2.0) / 2.0;
+                    let texture = enemy.default_texture();
+                    let size =
+                        texture.size() / 1.5 + ((f.1 / duration) * texture.size() / 2.0) / 2.0;
                     let pos = vec2(
                         self.pos.x + catapult_pos.x * 2.0 - size.x / 2.0 + 2.0,
                         self.pos.y + catapult_pos.y * 2.0 - size.y / 2.0,
@@ -491,12 +490,12 @@ impl Boss for RedGuy {
                         return false;
                     }
                     draw_texture_ex(
-                        text,
+                        texture,
                         pos.x,
                         pos.y,
                         WHITE,
                         DrawTextureParams {
-                            dest_size: Some(vec2(text.width(), text.height())),
+                            dest_size: Some(vec2(texture.width(), texture.height())),
                             ..Default::default()
                         },
                     );
@@ -577,11 +576,11 @@ impl Boss for RedGuy {
             let pos = vec2(enemy.1.x, heigth);
             if check_collision(pos, map) && func.is_sign_positive() {
                 let pos = vec2(pos.x, (pos.y / 16.0).floor() * 16.0 - 16.0);
-                enemies.push(enemy.0.spawn(pos, map));
+                // enemies.push(enemy.0.spawn(pos, map));
                 return false;
             }
 
-            draw_texture(enemy.0.default_texture(), pos.x, pos.y, WHITE);
+            // draw_texture(enemy.0.default_texture(), pos.x, pos.y, WHITE);
             return true;
         });
         self.actions.append(&mut new_actions);
@@ -591,11 +590,11 @@ impl Boss for RedGuy {
             let animation = ASSETS.red_boss.get("rocket_enter");
             if rocket.1 > animation.get_duration() {
                 self.incoming_rocket = None;
-                projectiles.push(Box::new(StandardProjectile::from(
+                projectiles.push(Projectile::from(
                     self.pos + vec2(38.0, 43.0) * 2.0,
-                    Projectiles::Rocket,
+                    crate::projectiles::Projectiles::Rocket,
                     None,
-                )));
+                ));
             } else {
                 animation.play_with_clock(rocket.0, rocket.1, None);
             }

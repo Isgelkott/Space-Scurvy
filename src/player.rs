@@ -2,9 +2,10 @@ use std::collections::HashSet;
 
 use crate::{
     assets::ASSETS,
-    enemies::{self, Bullet, Enemy, Projectile, check_collision_with_size},
-    level::{Layer, Level, MAP_SCALE_FACTOR, TILE_SIZE},
+    enemies::NewEnemy,
+    level::*,
     particles::Particle,
+    projectiles::Projectile,
     utils::{Animation, *},
 };
 use macroquad::prelude::*;
@@ -13,7 +14,7 @@ pub struct Player {
     pub hp: u32,
     pub pos: Vec2,
     pub size: Vec2,
-    velocity: Vec2,
+    pub velocity: Vec2,
     grounded: bool,
     speed: f32,
     current_top_animation: Option<(&'static Animation, f32)>,
@@ -68,11 +69,13 @@ impl Player {
     pub fn update(
         &mut self,
         map: &mut Level,
-        projectiles: &mut Vec<Box<dyn Projectile>>,
-        enemies: &mut Vec<Box<dyn Enemy>>,
+        projectiles: &mut Vec<Projectile>,
+        enemies: &mut Vec<NewEnemy>,
         particles: &mut Vec<Particle>,
         frame_time: f32,
     ) {
+        const JUMP_HEIGHT: f32 = -320.0;
+
         if let Some(death) = &mut self.death {
             death.1 += frame_time;
         } else {
@@ -106,7 +109,7 @@ impl Player {
             if self.grounded {
                 self.velocity.x = direction * self.speed;
                 if is_key_pressed(KeyCode::Space) {
-                    self.velocity.y = -320.0;
+                    self.velocity.y = JUMP_HEIGHT;
                 }
             } else {
                 self.velocity.x = direction * self.speed;
@@ -124,38 +127,11 @@ impl Player {
             self.grounded = false;
             for (index, point) in collision_points.iter().enumerate() {
                 enemies.retain_mut(|f| {
-                    let bounds = f.get_bounds();
-                    let collision = check_collision_with_size(
-                        (
-                            self.pos + vec2(point.0, point.1) + self.velocity * frame_time,
-                            Vec2::ZERO,
-                        ),
-                        bounds,
-                    );
-                    if collision {
-                        if self.pos.y + self.size.y < bounds.0.y && f.on_jumped_on_by_player() {
-                            self.velocity.y = -200.0;
-                            particles.push(Particle::new(
-                                Box::new(|f| ASSETS.blood.play(f, None)),
-                                crate::particles::Lifetime::ByTime(ASSETS.blood.get_duration()),
-                                None,
-                                self.pos,
-                            ));
-                            return false;
-                        } else {
-                            if let Some((knockback_origin, knockback_strenght, damage)) =
-                                f.on_player_contact(particles)
-                            {
-                                self.knockback(knockback_origin, knockback_strenght);
-                                self.damage(Some(damage), DeathCause::Default);
-                            }
-                        }
-                    }
                     return true;
                 });
 
-                let map_pos = (self.pos + self.velocity * frame_time + vec2(point.0, point.1))
-                    / (TILE_SIZE * MAP_SCALE_FACTOR);
+                let map_pos =
+                    (self.pos + self.velocity * frame_time + vec2(point.0, point.1)) / (TILE_SIZE);
 
                 let mut tile_no = map_pos.y as usize * map.width as usize + map_pos.x as usize;
                 if map_pos.x.floor() == map_pos.x && index % 2 == 1 {
@@ -166,10 +142,10 @@ impl Player {
                     break;
                 }
                 let pottential_collider = &mut map.tiles[tile_no];
-                let x0 = map_pos.x.floor() * TILE_SIZE * MAP_SCALE_FACTOR - point.0;
-                let x1 = (map_pos.x.floor() + 1.0) * MAP_SCALE_FACTOR * TILE_SIZE - point.0;
-                let y0 = map_pos.y.floor() * TILE_SIZE * MAP_SCALE_FACTOR - point.1;
-                let y1 = (map_pos.y.floor() + 1.0) * MAP_SCALE_FACTOR * TILE_SIZE - point.1;
+                let x0 = map_pos.x.floor() * TILE_SIZE - point.0;
+                let x1 = (map_pos.x.floor() + 1.0) * TILE_SIZE - point.0;
+                let y0 = map_pos.y.floor() * TILE_SIZE - point.1;
+                let y1 = (map_pos.y.floor() + 1.0) * TILE_SIZE - point.1;
                 if let Some(trigger) = pottential_collider.trigger {
                     let mut checked = HashSet::new();
                     let mut to_check = vec![tile_no];
@@ -243,24 +219,52 @@ impl Player {
             if shader {
                 gl_use_material(&IFRAMES_MATERIAL);
             }
-            if let Some((current_top_animation, animation_clock)) = &mut self.current_top_animation
-            {
-                if current_top_animation.1 as f32 / 1000.0 < *animation_clock {
-                    self.current_top_animation = None;
-                    top_animation.play(self.pos, Some(params.clone()));
+            if is_key_pressed(KeyCode::F) {
+                self.current_top_animation = Some((&ASSETS.player.get("shoot"), 0.0));
+                // projectiles.push(Box::new(Bullet::new(
+                //     self.pos
+                //         + vec2(
+                //             if !params.flip_x {
+                //                 self.size.x - 2.0
+                //             } else {
+                //                 2.0
+                //             },
+                //             14.0,
+                //         ),
+                //     vec2(if !params.flip_x { 1.0 } else { -1.0 }, 0.0),
+                // )));
+            }
+
+            let jump_anim = ASSETS.player.get("jump");
+            if !self.grounded {
+                if self.velocity.y > JUMP_HEIGHT * 0.8 {
+                    jump_anim.draw_index(self.pos, 0, Some(params.clone()));
+                } else if self.velocity.y > -JUMP_HEIGHT / 2.0 {
+                    jump_anim.draw_index(self.pos, 2, Some(params.clone()));
                 } else {
-                    current_top_animation.play_with_clock(
-                        self.pos,
-                        *animation_clock,
-                        Some(params.clone()),
-                    );
-                    *animation_clock += frame_time;
+                    jump_anim.draw_index(self.pos, 1, Some(params.clone()));
                 }
             } else {
-                top_animation.play(self.pos, Some(params.clone()));
-            };
+                if let Some((current_top_animation, animation_clock)) =
+                    &mut self.current_top_animation
+                {
+                    if current_top_animation.1 as f32 / 1000.0 < *animation_clock {
+                        self.current_top_animation = None;
+                        top_animation.play(self.pos, Some(params.clone()));
+                    } else {
+                        current_top_animation.play_with_clock(
+                            self.pos,
+                            *animation_clock,
+                            Some(params.clone()),
+                        );
+                        *animation_clock += frame_time;
+                    }
+                } else {
+                    top_animation.play(self.pos, Some(params.clone()));
+                };
 
-            bot_animation.play(self.pos, Some(params.clone()));
+                bot_animation.play(self.pos, Some(params.clone()));
+            }
             if self.velocity.x.abs() < 2. {
                 self.velocity.x = 0.0
             }
@@ -268,21 +272,7 @@ impl Player {
                 self.velocity.y = 0.0
             }
             self.pos += self.velocity * frame_time;
-            if is_key_pressed(KeyCode::F) {
-                self.current_top_animation = Some((&ASSETS.player.get("shoot"), 0.0));
-                projectiles.push(Box::new(Bullet::new(
-                    self.pos
-                        + vec2(
-                            if !params.flip_x {
-                                self.size.x - 2.0
-                            } else {
-                                2.0
-                            },
-                            14.0,
-                        ),
-                    vec2(if !params.flip_x { 1.0 } else { -1.0 }, 0.0),
-                )));
-            }
+
             self.previous_flipped = params.flip_x;
             if shader {
                 gl_use_default_material();

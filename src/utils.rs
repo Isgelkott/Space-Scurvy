@@ -24,6 +24,7 @@ pub fn load_ase_texture(bytes: &[u8], layer: Option<u32>, frame: Option<u32>) ->
     texture.set_filter(FilterMode::Nearest);
     texture
 }
+
 pub fn create_camera(dimensions: Vec2) -> Camera2D {
     let rt = render_target(dimensions.x as u32, dimensions.y as u32);
     rt.texture.set_filter(FilterMode::Nearest);
@@ -204,14 +205,27 @@ pub fn load_animation_by_layer(data: &[u8]) -> AnimationGroup {
     }
     AnimationGroup(layers)
 }
+
+pub trait DrawTexture {
+    fn draw(&self, pos: Vec2, params: Option<DrawTextureParams>);
+}
+impl DrawTexture for Texture2D {
+    fn draw(&self, pos: Vec2, params: Option<DrawTextureParams>) {
+        draw_texture_ex(self, pos.x, pos.y, WHITE, params.unwrap_or_default());
+    }
+}
 pub type Animation = (Vec<(Texture2D, u32)>, u32);
 pub trait AnimationMethods {
     fn play(&self, pos: Vec2, params: Option<DrawTextureParams>);
     fn play_with_clock(&self, pos: Vec2, clock: f32, params: Option<DrawTextureParams>);
     fn get_size(&self) -> Vec2;
     fn get_duration(&self) -> f32;
+    fn draw_index(&self, pos: Vec2, index: usize, params: Option<DrawTextureParams>);
 }
 impl AnimationMethods for Animation {
+    fn draw_index(&self, pos: Vec2, index: usize, params: Option<DrawTextureParams>) {
+        &self.0[index].0.draw(pos, params);
+    }
     fn get_duration(&self) -> f32 {
         self.1 as f32 / 1000.0
     }
