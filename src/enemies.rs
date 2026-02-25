@@ -156,12 +156,16 @@ pub struct NewEnemy {
 }
 impl NewEnemy {
     pub fn from(preset: PresetEnemies, pos: Vec2, level: &Level) -> Self {
-        let behaviour;
+        let behaviour: Box<dyn EnemyBehaviour>;
         let size;
         match preset {
             PresetEnemies::Jetpacker => {
                 size = ASSETS.jetpacker.get_size();
                 behaviour = Box::new(Jetpacker::new(pos, level));
+            }
+            PresetEnemies::Fish => {
+                behaviour = Box::new(Fish::new(pos, level));
+                size = ASSETS.fish.get_size();
             }
             _ => panic!(),
         };
@@ -239,7 +243,7 @@ impl EnemyBehaviour for Fish {
                 );
                 gl_use_material(&FISH_MATERIAL);
             }
-            ASSETS.fish.get("jump").play(
+            ASSETS.fish.get("attack").play(
                 *pos,
                 Some(DrawTextureParams {
                     rotation,
