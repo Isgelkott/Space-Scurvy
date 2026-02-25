@@ -8,6 +8,7 @@ use crate::{
 pub enum Lifetime {
     ByDistance(f32),
     ByTime(f32),
+    None,
 }
 pub enum Particles {
     Explosion,
@@ -20,6 +21,7 @@ pub struct Particle {
     behavior: Option<Box<dyn Fn(f32) -> f32>>,
     origin: Vec2,
     speed: f32,
+    pos: Vec2,
 }
 impl Particle {
     // pub fn static_from_animation(animation: &'static Animation) -> Self {}
@@ -57,21 +59,23 @@ impl Particle {
             behavior,
             origin,
             speed: 4.0,
+            pos: origin,
         }
     }
     pub fn update(&mut self, frame_time: f32) {
         self.clock += frame_time;
-        let mut pos = self.origin;
+        self.pos = self.origin;
         if let Some(behavior_fn) = &self.behavior {
-            pos.y = behavior_fn(self.clock) + self.origin.y;
+            self.pos.y = behavior_fn(self.clock) + self.origin.y;
         }
-        pos.x = self.origin.x + self.clock;
-        (self.draw)(pos);
+        self.pos.x = self.origin.x + self.clock;
+        (self.draw)(self.pos);
     }
     pub fn should_die(&self) -> bool {
         match self.lifetime {
             Lifetime::ByTime(time) => self.clock > time,
-            _ => panic!(),
+            Lifetime::ByDistance(distance) => self.pos.distance(self.origin) > distance,
+            Lifetime::None => false,
         }
     }
 }
@@ -108,7 +112,7 @@ impl ParticleGenerator {
         match self.particle_type {
             ParticleType::Acid => Particle::new(
                 Box::new(|f| draw_circle(f.x, f.y, 1.5, Color::from_hex(0x5ac54f))),
-                Lifetime::ByDistance(16.0),
+                Lifetime::None,
                 Some(Box::new(|f| -5.0 * f.powi(2) + 5.0 * f)),
                 self.pos + vec2(rand_pos, 0.0),
             ),
