@@ -48,12 +48,22 @@ pub struct Game {
 }
 impl Game {
     fn update_camera(&mut self) {
-        const FORESIGHT: f32 = 10.0;
+        const FORESIGHT: f32 = 7.5;
         const MAX_FORESIGHT: f32 = FORESIGHT * 2.5;
-        const SPEED: f32 = 1.0;
-        let desired_pos = (self.player.pos.x + self.player.velocity.x * FORESIGHT);
-        if (self.camera.pos.x - desired_pos).abs() > 10.0 {
-            let update = (desired_pos - self.camera.pos.x).signum() * SPEED;
+        const SPEED: f32 = 1.2;
+        let desired_x = (self.player.pos.x + self.player.velocity.x * FORESIGHT);
+        let speed = SPEED
+            * if (desired_x - self.player.pos.x).signum()
+                != (self.camera.pos.x - self.player.pos.x).signum()
+            {
+                1.5
+            } else if desired_x.abs() < self.camera.pos.x.abs() {
+                0.7
+            } else {
+                1.0
+            };
+        if (self.camera.pos.x - desired_x).abs() > 10.0 {
+            let update = (desired_x - self.camera.pos.x).signum() * speed;
             self.camera.pos.x = (self.camera.pos.x + update).clamp(
                 (self.player.pos.x - MAX_FORESIGHT),
                 (self.player.pos.x + MAX_FORESIGHT),
