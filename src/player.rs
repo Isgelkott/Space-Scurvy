@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
+    CameraHolder,
     assets::ASSETS,
     enemies::NewEnemy,
     level::*,
@@ -73,6 +74,7 @@ impl Player {
         enemies: &mut Vec<NewEnemy>,
         particles: &mut Vec<Particle>,
         frame_time: f32,
+        camera: &mut CameraHolder,
     ) {
         const JUMP_HEIGHT: f32 = -320.0;
 
@@ -208,6 +210,7 @@ impl Player {
                 }
             }
             if self.grounded {
+                camera.calculate_y_up(&self);
                 if self.velocity.x.is_sign_positive() {
                     self.velocity.x = (self.velocity.x - FRICITON).max(0.0);
                 } else {

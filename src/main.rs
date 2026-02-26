@@ -28,6 +28,50 @@ const SCREEN_SIZE: (f32, f32) = (300.0, 200.0);
 struct CameraHolder {
     camera: Camera2D,
     pos: Vec2,
+    desired_y: f32,
+}
+impl CameraHolder {
+    fn update(&mut self, player: &Player) {
+        dbg!(self.pos.y, self.desired_y);
+        const FORESIGHT: f32 = 7.5;
+        const MAX_FORESIGHT: f32 = FORESIGHT * 3.5;
+        const X_SPEED: f32 = 1.2;
+
+        let desired_x = (player.pos.x + player.velocity.x * FORESIGHT);
+        let speed = X_SPEED
+            * if (desired_x - player.pos.x).signum() != (self.pos.x - player.pos.x).signum() {
+                1.5
+            } else if desired_x.abs() < self.pos.x.abs() {
+                0.7
+            } else {
+                1.0
+            };
+        if (self.pos.x - desired_x).abs() > 10.0 {
+            let update = (desired_x - self.pos.x).signum() * speed;
+            self.pos.x = (self.pos.x + update)
+                .clamp(player.pos.x - MAX_FORESIGHT, player.pos.x + MAX_FORESIGHT);
+        }
+
+        const Y_SPEED: f32 = 0.5;
+        const Y_BELOW_THRESHOLD: f32 = 30.0;
+        if player.pos.y + SCREEN_SIZE.1 / 2.0 + Y_BELOW_THRESHOLD > self.pos.y + SCREEN_SIZE.1 {
+            self.pos.y = player.pos.y + player.velocity.y - 20.0 - SCREEN_SIZE.1 * 2.0;
+            self.desired_y = self.pos.y
+        }
+        if (self.pos.y - self.desired_y).abs() > 5.0 {
+            self.pos.y += (self.desired_y - self.pos.y).signum() * Y_SPEED;
+        }
+    }
+    fn calculate_y_up(&mut self, player: &Player) {
+        const THRESHOLD: f32 = 100.0;
+
+        if player.pos.y < self.pos.y - THRESHOLD + SCREEN_SIZE.1 / 2.0 {
+            dbg!(player.pos.y);
+            self.desired_y = player.pos.y;
+        } else {
+            dbg!(player.pos.y + SCREEN_SIZE.1, self.pos.y - THRESHOLD);
+        }
+    }
 }
 
 pub struct Game {
@@ -47,29 +91,6 @@ pub struct Game {
     map_animations: Vec<MapAnimation>,
 }
 impl Game {
-    fn update_camera(&mut self) {
-        const FORESIGHT: f32 = 7.5;
-        const MAX_FORESIGHT: f32 = FORESIGHT * 2.5;
-        const SPEED: f32 = 1.2;
-        let desired_x = (self.player.pos.x + self.player.velocity.x * FORESIGHT);
-        let speed = SPEED
-            * if (desired_x - self.player.pos.x).signum()
-                != (self.camera.pos.x - self.player.pos.x).signum()
-            {
-                1.5
-            } else if desired_x.abs() < self.camera.pos.x.abs() {
-                0.7
-            } else {
-                1.0
-            };
-        if (self.camera.pos.x - desired_x).abs() > 10.0 {
-            let update = (desired_x - self.camera.pos.x).signum() * speed;
-            self.camera.pos.x = (self.camera.pos.x + update).clamp(
-                (self.player.pos.x - MAX_FORESIGHT),
-                (self.player.pos.x + MAX_FORESIGHT),
-            );
-        }
-    }
     fn draw_hud(&self) {
         set_default_camera();
 
@@ -120,6 +141,7 @@ impl Game {
             map,
             player: Player::new(special_data.spawn_location),
             camera: CameraHolder {
+                desired_y: special_data.spawn_location.y,
                 camera: create_camera(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1)),
                 pos: special_data.spawn_location,
             },
@@ -213,8 +235,9 @@ impl Game {
                 &mut self.enemies,
                 &mut self.particles,
                 frame_time,
+                &mut self.camera,
             );
-            self.update_camera();
+            self.camera.update(&self.player);
         }
         #[cfg(debug_assertions)]
         {
