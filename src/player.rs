@@ -193,8 +193,9 @@ impl Player {
                 for x in 0..((self.size.x / 16.0).ceil()) as i16 + 1 {
                     let x = ((x * 16) as f32).min(self.size.x);
                     let point = (x, y);
-                    let mut map_pos =
-                        (self.pos + self.velocity * frame_time + vec2(point.0, point.1));
+                    let mut map_pos = (self.pos
+                        + vec2(self.velocity.x, 0.0) * frame_time
+                        + vec2(point.0, point.1));
                     if x != 0.0 && map_pos.x.fract() == 0.0 {
                         map_pos.x -= 1.0;
                     }
