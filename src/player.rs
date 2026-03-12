@@ -147,18 +147,23 @@ impl Player {
 
             for y in 0..(self.size.y / 16.0) as i16 + 1 {
                 let y = ((y * 16) as f32).min(self.size.y);
-                for x in 0..(self.size.x / 16.0) as i16 + 1 {
+                for x in 0..((self.size.x / 16.0).ceil()) as i16 + 1 {
                     let x = ((x * 16) as f32).min(self.size.x - 1.0);
                     let point = (x, y);
-                    let map_pos = (self.pos
+                    let mut map_pos = (self.pos
+                        + vec2(1.0, 0.0)
                         + vec2(0.0, self.velocity.y) * frame_time
                         + vec2(point.0, point.1));
+                    if x != 0.0 && map_pos.x.fract() == 0.0 {
+                        map_pos.x -= 1.0;
+                    }
                     dbg!(map_pos);
                     let (tile) = get_tile(map_pos, level);
                     if let Some((tile, tile_pos)) = tile {
                         if tile.collision {
                             if DEBUG_FLAGS.show_collisions {
-                                draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, WHITE);
+                                dbg!(tile_pos);
+                                draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, BLUE);
                             }
 
                             dbg!("collid y");
@@ -185,20 +190,30 @@ impl Player {
             }
             for y in 0..(self.size.y / 16.0) as i16 + 1 {
                 let y = ((y * 16) as f32).min(self.size.y - 1.0);
-                for x in 0..(self.size.x / 16.0) as i16 + 1 {
+                for x in 0..((self.size.x / 16.0).ceil()) as i16 + 1 {
                     let x = ((x * 16) as f32).min(self.size.x);
                     let point = (x, y);
-                    let map_pos = (self.pos
-                        + vec2(self.velocity.x, 0.0) * frame_time
-                        + vec2(point.0, point.1));
+                    let mut map_pos =
+                        (self.pos + self.velocity * frame_time + vec2(point.0, point.1));
+                    if x != 0.0 && map_pos.x.fract() == 0.0 {
+                        map_pos.x -= 1.0;
+                    }
                     let (tile) = get_tile(map_pos, level);
                     if let Some((tile, tile_pos)) = tile {
                         if tile.collision {
+                            if DEBUG_FLAGS.show_collisions {
+                                draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, YELLOW);
+                            }
+
                             dbg!("collid x");
-                            self.pos.x = self
-                                .pos
-                                .x
-                                .clamp(tile_pos.x - point.0, tile_pos.x + TILE_SIZE - point.0);
+                            let x1 = tile_pos.x - point.0;
+                            let x2 = tile_pos.x + TILE_SIZE - point.0;
+                            if (x1 - self.pos.x).abs() < (x2 - self.pos.x).abs() {
+                                self.pos.x = x1
+                            } else {
+                                self.pos.x = x2;
+                            }
+                            // self.pos.x = self.pos.x.clamp(x1, x2);
                             self.velocity.x = 0.;
                         }
                     } else {
