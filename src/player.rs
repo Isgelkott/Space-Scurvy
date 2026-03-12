@@ -69,7 +69,7 @@ impl Player {
 
     pub fn update(
         &mut self,
-        map: &mut Level,
+        level: &mut Level,
         projectiles: &mut Vec<Projectile>,
         enemies: &mut Vec<NewEnemy>,
         particles: &mut Vec<Particle>,
@@ -117,98 +117,103 @@ impl Player {
                 self.velocity.x = direction * self.speed;
             }
 
-            let collision_points = [
-                (0.0, 0.0),
-                (self.size.x, 0.0),
-                (0.0, self.size.y / 2.0),
-                (self.size.x, self.size.y / 2.0),
-                (0.0, self.size.y),
-                (self.size.x, self.size.y),
-            ];
             self.velocity.y += GRAVITY * frame_time;
             self.grounded = false;
-            for (index, point) in collision_points.iter().enumerate() {
-                enemies.retain_mut(|f| {
-                    return true;
-                });
+            // while !to_check.is_empty() {
+            //     to_check.retain_mut(|tile| {
+            //         let tile = *tile;
+            //         if !checked.contains(&tile)
+            //             && let Some(trigger) = &mut pottential_collider.trigger
+            //         {
+            //             *trigger = true;
+            //             let check = [
+            //                 tile.saturating_sub(1),
+            //                 tile + 1,
+            //                 tile.saturating_sub(map.width),
+            //                 tile + map.width,
+            //             ];
+            //             for i in check {
+            //                 buffer.push(i);
+            //             }
+            //             checked.insert(tile);
+            //             return false;
+            //         } else {
+            //             return false;
+            //         }
+            //     });
+            //     to_check.append(&mut buffer);
+            // }
+            dbg!((self.velocity));
 
-                let map_pos =
-                    (self.pos + self.velocity * frame_time + vec2(point.0, point.1)) / (TILE_SIZE);
-
-                let mut tile_no = map_pos.y as usize * map.width as usize + map_pos.x as usize;
-                if map_pos.x.floor() == map_pos.x && index % 2 == 1 {
-                    tile_no -= 1;
-                }
-                if tile_no > map.tiles.len() - 1 {
-                    println!("out of bounds");
-                    break;
-                }
-                let pottential_collider = &mut map.tiles[tile_no];
-                let x0 = map_pos.x.floor() * TILE_SIZE - point.0;
-                let x1 = (map_pos.x.floor() + 1.0) * TILE_SIZE - point.0;
-                let y0 = map_pos.y.floor() * TILE_SIZE - point.1;
-                let y1 = (map_pos.y.floor() + 1.0) * TILE_SIZE - point.1;
-                if let Some(trigger) = pottential_collider.trigger {
-                    let mut checked = HashSet::new();
-                    let mut to_check = vec![tile_no];
-                    let mut buffer = Vec::new();
-                    while !to_check.is_empty() {
-                        to_check.retain_mut(|tile| {
-                            let tile = *tile;
-                            if !checked.contains(&tile)
-                                && let Some(trigger) = &mut pottential_collider.trigger
-                            {
-                                *trigger = true;
-                                let check =
-                                    [tile - 1, tile + 1, tile - map.width, tile + map.width];
-                                for i in check {
-                                    buffer.push(i);
-                                }
-                                checked.insert(tile);
-                                return false;
-                            } else {
-                                return false;
+            for y in 0..(self.size.y / 16.0) as i16 + 1 {
+                let y = ((y * 16) as f32).min(self.size.y);
+                for x in 0..(self.size.x / 16.0) as i16 + 1 {
+                    let x = ((x * 16) as f32).min(self.size.x - 1.0);
+                    let point = (x, y);
+                    let map_pos = (self.pos
+                        + vec2(0.0, self.velocity.y) * frame_time
+                        + vec2(point.0, point.1));
+                    dbg!(map_pos);
+                    let (tile) = get_tile(map_pos, level);
+                    if let Some((tile, tile_pos)) = tile {
+                        if tile.collision {
+                            if DEBUG_FLAGS.show_collisions {
+                                draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, WHITE);
                             }
-                        });
-                        to_check.append(&mut buffer);
-                    }
-                }
-                if pottential_collider.collision {
-                    let mut clamped_x = false;
-                    let wa = self.pos.x == x0;
 
-                    if index < 4 || self.pos.y != y0 {
-                        self.pos.x = self.pos.x.clamp(x0, x1);
-                        if self.pos.x == x0 || self.pos.x == x1 && !wa {
-                            clamped_x = true;
-                            self.velocity.x = 0.0;
-                        }
-                    }
+                            dbg!("collid y");
+                            self.pos.y = self
+                                .pos
+                                .y
+                                .clamp(tile_pos.y - point.1, tile_pos.y + TILE_SIZE - point.1);
+                            if self.pos.y == (tile_pos.y - point.1)
+                                || self.pos.y == tile_pos.y + TILE_SIZE - point.1
+                            {
+                                self.grounded = true;
 
-                    self.pos.y = self.pos.y.clamp(y0, y1);
-                    if self.pos.y == y0 && !clamped_x {
-                        self.velocity.y = 0.0;
-                        self.grounded = true;
-                    } else if self.pos.y == y1 {
-                        self.velocity.y = 0.0;
-                    }
-                } else if index > 3 {
-                    if pottential_collider.one_way_collision {
-                        if self.velocity.y.is_sign_positive() {
-                            self.pos.y = y0;
-                            self.velocity.y = 0.0;
-                            self.grounded = true;
+                                self.velocity.y = 0.;
+                            }
+                        } else {
+                            if DEBUG_FLAGS.show_collisions {
+                                draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, RED);
+                            }
                         }
-                    }
-                }
-                if !self.grounded {
-                    if let Some(death_cause) = &pottential_collider.death_cause
-                        && self.death.is_none()
-                    {
-                        self.death = Some((*death_cause, 0.0));
+                    } else {
+                        dbg!("out of bounds :(");
                     }
                 }
             }
+            for y in 0..(self.size.y / 16.0) as i16 + 1 {
+                let y = ((y * 16) as f32).min(self.size.y - 1.0);
+                for x in 0..(self.size.x / 16.0) as i16 + 1 {
+                    let x = ((x * 16) as f32).min(self.size.x);
+                    let point = (x, y);
+                    let map_pos = (self.pos
+                        + vec2(self.velocity.x, 0.0) * frame_time
+                        + vec2(point.0, point.1));
+                    let (tile) = get_tile(map_pos, level);
+                    if let Some((tile, tile_pos)) = tile {
+                        if tile.collision {
+                            dbg!("collid x");
+                            self.pos.x = self
+                                .pos
+                                .x
+                                .clamp(tile_pos.x - point.0, tile_pos.x + TILE_SIZE - point.0);
+                            self.velocity.x = 0.;
+                        }
+                    } else {
+                        dbg!("out of bounds :(");
+                    }
+                }
+            }
+
+            // if !self.grounded {
+            //     if let Some(death_cause) = &pottential_collider.death_cause
+            //         && self.death.is_none()
+            //     {
+            //         self.death = Some((*death_cause, 0.0));
+            //     }
+            // }
             if self.grounded {
                 camera.calculate_y_up(&self);
                 if self.velocity.x.is_sign_positive() {
@@ -239,10 +244,11 @@ impl Player {
             }
 
             let jump_anim = ASSETS.player.get("jump");
+
             if !self.grounded {
-                if self.velocity.y > JUMP_HEIGHT * 0.8 {
+                if self.velocity.y < JUMP_HEIGHT * 0.5 {
                     jump_anim.draw_index(self.pos, 0, Some(params.clone()));
-                } else if self.velocity.y > -JUMP_HEIGHT / 2.0 {
+                } else if self.velocity.y > 60.0 {
                     jump_anim.draw_index(self.pos, 2, Some(params.clone()));
                 } else {
                     jump_anim.draw_index(self.pos, 1, Some(params.clone()));
@@ -268,13 +274,15 @@ impl Player {
 
                 bot_animation.play(self.pos, Some(params.clone()));
             }
-            if self.velocity.x.abs() < 2. {
-                self.velocity.x = 0.0
+            // if self.velocity.x.abs() < 2. {
+            //     self.velocity.x = 0.0
+            // }
+            // if self.velocity.y.abs() < 2. {
+            //     self.velocity.y = 0.0
+            // }
+            if !DEBUG_FLAGS.still {
+                self.pos += self.velocity * frame_time;
             }
-            if self.velocity.y.abs() < 2. {
-                self.velocity.y = 0.0
-            }
-            self.pos += self.velocity * frame_time;
 
             self.previous_flipped = params.flip_x;
             if shader {

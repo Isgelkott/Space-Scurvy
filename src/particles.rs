@@ -2,7 +2,7 @@ use macroquad::{color::Color, math::Vec2, prelude::*, rand::gen_range};
 
 use crate::{
     assets::ASSETS,
-    level::{MAP_SCALE_FACTOR, TILE_SIZE, Tile},
+    level::{TILE_SIZE, Tile},
     utils::*,
 };
 pub enum Lifetime {
@@ -79,9 +79,11 @@ impl Particle {
         }
     }
 }
+#[derive(Clone, Copy)]
 pub enum ParticleType {
     Acid,
 }
+#[derive(Clone, Copy)]
 pub struct ParticleGenerator {
     pos: Vec2,
     clock: f32,
@@ -108,7 +110,7 @@ impl ParticleGenerator {
         }
     }
     fn gen_particle(&self) -> Particle {
-        let rand_pos = gen_range(0.0, TILE_SIZE * MAP_SCALE_FACTOR);
+        let rand_pos = gen_range(0.0, TILE_SIZE);
         match self.particle_type {
             ParticleType::Acid => Particle::new(
                 Box::new(|f| draw_circle(f.x, f.y, 1.5, Color::from_hex(0x5ac54f))),

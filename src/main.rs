@@ -32,26 +32,7 @@ struct CameraHolder {
 }
 impl CameraHolder {
     fn update(&mut self, player: &Player) {
-        dbg!(self.pos.y, self.desired_y);
-        const FORESIGHT: f32 = 7.5;
-        const MAX_FORESIGHT: f32 = FORESIGHT * 3.5;
-        const X_SPEED: f32 = 1.2;
-
-        let desired_x = (player.pos.x + player.velocity.x * FORESIGHT);
-        let speed = X_SPEED
-            * if (desired_x - player.pos.x).signum() != (self.pos.x - player.pos.x).signum() {
-                1.5
-            } else if desired_x.abs() < self.pos.x.abs() {
-                0.7
-            } else {
-                1.0
-            };
-        if (self.pos.x - desired_x).abs() > 10.0 {
-            let update = (desired_x - self.pos.x).signum() * speed;
-            self.pos.x = (self.pos.x + update)
-                .clamp(player.pos.x - MAX_FORESIGHT, player.pos.x + MAX_FORESIGHT);
-        }
-
+        //dbg!(self.pos.y, self.desired_y);
         const Y_SPEED: f32 = 0.5;
         const Y_BELOW_THRESHOLD: f32 = 30.0;
         if player.pos.y + SCREEN_SIZE.1 / 2.0 + Y_BELOW_THRESHOLD > self.pos.y + SCREEN_SIZE.1 {
@@ -59,17 +40,38 @@ impl CameraHolder {
             self.desired_y = self.pos.y
         }
         if (self.pos.y - self.desired_y).abs() > 5.0 {
-            self.pos.y += (self.desired_y - self.pos.y).signum() * Y_SPEED;
+            self.pos.y += ((self.desired_y - self.pos.y).signum() * Y_SPEED).floor();
         }
+        const FORESIGHT: f32 = 7.5;
+        const MAX_FORESIGHT: f32 = FORESIGHT * 3.5;
+        const X_SPEED: f32 = 1.2;
+
+        let desired_x = (player.pos.x + player.velocity.x * FORESIGHT);
+        if (desired_x - player.pos.x).abs() > (self.pos.x - player.pos.x).abs() {
+            let speed = X_SPEED
+                * if (desired_x - player.pos.x).signum() != (self.pos.x - player.pos.x).signum() {
+                    1.5
+                } else if desired_x.abs() < self.pos.x.abs() {
+                    0.7
+                } else {
+                    1.0
+                };
+            if (self.pos.x - desired_x).abs() > 10.0 {
+                let update = (desired_x - self.pos.x).signum() * speed;
+                self.pos.x = (self.pos.x + update)
+                    .clamp(player.pos.x - MAX_FORESIGHT, player.pos.x + MAX_FORESIGHT);
+            }
+        }
+        //self.pos = self.pos.round();
     }
     fn calculate_y_up(&mut self, player: &Player) {
         const THRESHOLD: f32 = 100.0;
+        self.desired_y = player.pos.y - 17.5;
 
         if player.pos.y < self.pos.y - THRESHOLD + SCREEN_SIZE.1 / 2.0 {
-            dbg!(player.pos.y);
-            self.desired_y = player.pos.y;
+            //dbg!(player.pos.y);
         } else {
-            dbg!(player.pos.y + SCREEN_SIZE.1, self.pos.y - THRESHOLD);
+            //dbg!(player.pos.y + SCREEN_SIZE.1, self.pos.y - THRESHOLD);
         }
     }
 }
@@ -116,10 +118,12 @@ impl Game {
     }
 
     fn new(level: Levels) -> Self {
-        let (map, special_data) = Level::new(level);
+        let (map, special_data) = load_tilemap(
+            include_str!("../assets/maps/testlvl.tmx"),
+            include_str!("../assets/tileset.tsx"),
+        );
         let mut enemies = Vec::new();
         for enemy in special_data.enemies.iter() {
-            dbg!(enemy);
             enemies.push(NewEnemy::from(enemy.0, enemy.1, &map))
         }
         Self {
@@ -131,7 +135,7 @@ impl Game {
             die: false,
             win: false,
             pickups: special_data.pickups,
-            backgrounds: Background::new(map.world_size),
+            backgrounds: Background::new(Vec2::ZERO),
             scale_factor: 1.0,
             particles: Vec::new(),
             projectiles: Vec::new(),
@@ -258,7 +262,7 @@ impl Game {
             &mut self.projectiles,
             frame_time,
         );
-        update_particle_generators(&mut self.map.tiles, &mut self.particles, frame_time);
+        // update_particle_generators(&mut self.map.tiles, &mut self.particles, frame_time);
         update_particles(&mut self.particles, frame_time);
         self.death();
     }
@@ -313,8 +317,10 @@ impl GameManger {
         if self.game.die {
             self.die_screen();
         } else {
-            let frame_time = get_frame_time().min(1. / 60.0);
-
+            let mut frame_time = get_frame_time().min(1. / 60.0);
+            if let Some(speed) = DEBUG_FLAGS.speed {
+                frame_time *= speed;
+            }
             self.game.update(frame_time).await;
             let mut black_bars: bool = false;
 

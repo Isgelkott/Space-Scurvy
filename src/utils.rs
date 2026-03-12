@@ -1,4 +1,4 @@
-use crate::level::{Level, MAP_SCALE_FACTOR, TILE_SIZE};
+use crate::level::{Level, TILE_SIZE, Tile};
 use asefile::*;
 use image::*;
 use macroquad::{
@@ -6,6 +6,32 @@ use macroquad::{
     prelude::*,
 };
 use std::{collections::HashMap, sync::LazyLock};
+#[derive(Default)]
+pub struct DebugFlags {
+    pub show_path: bool,
+    pub print_specials: bool,
+    pub still: bool,
+    pub speed: Option<f32>,
+    pub show_collisions: bool,
+}
+pub static DEBUG_FLAGS: LazyLock<DebugFlags> = LazyLock::new(|| {
+    let mut flags = DebugFlags::default();
+    let mut iter = std::env::args().into_iter();
+    while let Some(arg) = iter.next() {
+        let arg = &arg as &str;
+        match arg {
+            "showpath" => flags.show_path = true,
+            "specials" => flags.print_specials = true,
+            "still" => flags.still = true,
+            "speed" => flags.speed = Some(iter.next().unwrap().parse::<f32>().unwrap()),
+            "coll" => flags.show_collisions = true,
+            _ => {
+                warn!("unknown flag! {}", arg);
+            }
+        }
+    }
+    flags
+});
 pub fn load_ase_texture(bytes: &[u8], layer: Option<u32>, frame: Option<u32>) -> Texture2D {
     let img = AsepriteFile::read(bytes).unwrap();
     let frame = frame.unwrap_or(0);
@@ -36,22 +62,24 @@ pub fn create_camera(dimensions: Vec2) -> Camera2D {
         ..Default::default()
     }
 }
-pub fn to_world_pos(pos: Vec2, map_width: usize) -> usize {
-    let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
-    map_pos.y as usize * map_width as usize + map_pos.x as usize
-}
-pub fn to_game_pos(pos: usize, level: &Level) -> Vec2 {
-    vec2(
-        (pos % level.width) as f32 * TILE_SIZE,
-        (pos / level.width) as f32 * TILE_SIZE,
-    )
+pub fn get_tile(pos: Vec2, level: &Level) -> Option<(&Tile, Vec2)> {
+    let ipos = ((pos.x / TILE_SIZE) as i16, (pos.y / TILE_SIZE) as i16);
+    let chunk_x = (ipos.0 / 16) * 16;
+    let chunk_y = (ipos.1 / 16) * 16;
+    if let Some(chunk) = level.chunks.iter().find(|f| f.pos == (chunk_x, chunk_y)) {
+        let local_x = ipos.0 - chunk_x;
+        let local_y = ipos.1 - chunk_y;
+        let index = (local_x % 16 + local_y * 16) as usize;
+        return Some((&chunk.tiles[index], (pos / TILE_SIZE).floor() * TILE_SIZE));
+    }
+    return None;
 }
 pub struct Spritesheet {
     spritesheet: Texture2D,
     size: (f32, f32),
 }
 impl Spritesheet {
-    pub fn draw_from(&self, coord: (usize, usize), pos: Vec2, params: Option<DrawTextureParams>) {
+    pub fn draw_from(&self, coord: (u16, u16), pos: Vec2, params: Option<DrawTextureParams>) {
         let mut params = params.unwrap_or_default();
         params.source = Some(Rect {
             x: coord.0 as f32 * self.size.0,
@@ -164,13 +192,14 @@ pub fn load_animation(data: &[u8]) -> (Vec<(Texture2D, u32)>, u32) {
     (frames, duration)
 }
 pub fn check_collision(pos: Vec2, map: &Level) -> bool {
-    let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
-    if map_pos.y as usize * map.width as usize + map_pos.x as usize > map.tiles.len() - 1 {
-        return false;
-    }
-    let pottential_collider =
-        &map.tiles[map_pos.y as usize * map.width as usize + map_pos.x as usize];
-    pottential_collider.collision
+    // let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
+    // if map_pos.y as usize * map.width as usize + map_pos.x as usize > map.tiles.len() - 1 {
+    //     return false;
+    // }
+    // let pottential_collider =
+    //     &map.tiles[map_pos.y as usize * map.width as usize + map_pos.x as usize];
+    // pottential_collider.collision
+    panic!()
 }
 
 pub fn load_animation_by_layer(data: &[u8]) -> AnimationGroup {
@@ -224,7 +253,7 @@ pub trait AnimationMethods {
 }
 impl AnimationMethods for Animation {
     fn draw_index(&self, pos: Vec2, index: usize, params: Option<DrawTextureParams>) {
-        &self.0[index].0.draw(pos, params);
+        self.0[index].0.draw(pos, params);
     }
     fn get_duration(&self) -> f32 {
         self.1 as f32 / 1000.0
@@ -287,7 +316,7 @@ void main() {
 const BULLET_SHADER: &'static str = "#version 100
 precision lowp float;
 
-uniform lowp float alpha; 
+uniform lowp float alpha;
 varying vec2 uv;
 void main() {
     gl_FragColor = vec4(0.0,0.0,0.0,alpha*uv.x*100.0);
@@ -323,7 +352,7 @@ pub static BULLET_MATERIAL: LazyLock<Material> = std::sync::LazyLock::new(|| {
 const FISH_SHADER: &'static str = "#version 100
 precision lowp float;
 
-uniform lowp float acidy; 
+uniform lowp float acidy;
 varying vec2 uv;
 uniform sampler2D Texture;
 
@@ -334,7 +363,7 @@ void main() {
     gl_FragColor = texture2D(Texture, uv);
 
     }else{
- gl_FragColor = vec4(0.0,0.0,0.0,0.0); 
+ gl_FragColor = vec4(0.0,0.0,0.0,0.0);
 
     }
 }
@@ -417,7 +446,7 @@ varying vec2 uv;
 uniform sampler2D Texture;
 
 void main() {
- 
+
     gl_FragColor = texture2D(Texture, uv) + vec4(0.5,0.5,0.5,0.0);
 }
 ";
@@ -451,7 +480,7 @@ const HP_SHADER: &'static str = "#version 100
 precision lowp float;
 
 varying vec2 uv;
-uniform lowp float black_x; 
+uniform lowp float black_x;
 uniform sampler2D Texture;
 
 void main() {
@@ -459,12 +488,12 @@ void main() {
  if (uv.x < black_x) {
         gl_FragColor = texture2D(Texture, uv);
     }  else{
-      gl_FragColor = vec4(0.0,0.0,0.0,1.0); 
-        
+      gl_FragColor = vec4(0.0,0.0,0.0,1.0);
+
     }
-    
+
 }else{
-gl_FragColor = vec4(0.0,0.0,0.0,0.0); 
-  
+gl_FragColor = vec4(0.0,0.0,0.0,0.0);
+
 }}
 ";

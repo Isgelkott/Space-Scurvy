@@ -9,41 +9,44 @@ use crate::{
 };
 use line_ending::LineEnding;
 use macroquad::prelude::*;
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::{Debug, write},
+    panic,
+};
 pub const TILE_SIZE: f32 = 16.0;
-pub const MAP_SCALE_FACTOR: f32 = 1.0;
-#[derive(PartialEq, Clone, Copy)]
-pub enum Layer {
-    Collision,
-    Decor,
-    OverPlayer,
-    OneWayCollision,
-    Enemies,
-    Special,
-    Path,
-    Death,
-}
-impl Layer {
-    fn from_str(input: &str) -> Self {
-        match input {
-            "collision" => Self::Collision,
-            input if input.contains("decor") => Self::Decor,
-            "one_way" => Self::OneWayCollision,
-            "over_player" => Self::OverPlayer,
-            "enemies" => Self::Enemies,
-            "special" => Self::Special,
-            "path" => Self::Path,
-            "death" => Self::Death,
-            _ => panic!("no layer named {}", input),
-        }
-    }
-}
-#[derive(PartialEq)]
+// #[derive(PartialEq, Clone, Copy)]
+// pub enum SpecialLayer {
+//     Collision,
+//     Decor,
+//     OverPlayer,
+//     OneWayCollision,
+//     Enemies,
+//     Special,
+//     Path,
+//     Death,
+// }
+// impl SpecialLayer {
+//     fn from_str(input: &str) -> Self {
+//         match input {
+//             "collision" => Self::Collision,
+//             input if input.contains("decor") => Self::Decor,
+//             "one_way" => Self::OneWayCollision,
+//             "over_player" => Self::OverPlayer,
+//             "enemies" => Self::Enemies,
+//             "special" => Self::Special,
+//             "path" => Self::Path,
+//             "death" => Self::Death,
+//             _ => panic!("no layer named {}", input),
+//         }
+//     }
+// }
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum VisualData {
-    ID(usize),
+    ID(u16),
     Animation(&'static Animation),
 }
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum SpecialTileData {
     Path,
     OutOfBounds,
@@ -51,6 +54,7 @@ pub enum SpecialTileData {
     Cannon,
     Switch,
 }
+#[derive(Clone, Copy)]
 pub enum TriggerBehaviour {
     PlayAnimationOnce(&'static Animation),
 }
@@ -68,7 +72,7 @@ impl MapAnimation {
         }
     }
 }
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Tile {
     pub visual: Vec<VisualData>,
     pub special_data: Vec<SpecialTileData>,
@@ -89,267 +93,210 @@ impl Tile {
         }
     }
 }
-pub fn load_tilemap(tilemap: &str, tileset: &str) -> ((Vec<Tile>, usize), SpecialData, usize) {
+pub struct Chunk {
+    pub pos: (i16, i16),
+    pub tiles: Vec<Tile>,
+}
+
+pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
+    fn parse_id(tile: &mut Tile, mut id: u16, special_data: &mut SpecialData, pos: Vec2) {
+        let mut visual = None;
+        if id == 0 {
+            return;
+        }
+        match id {
+            1..20 => {
+                tile.collision = true;
+                visual = Some(id);
+            }
+            60..80 => {
+                let map_animation = match id {
+                    62 => (20.0, &ASSETS.laughing_man),
+                    _ => unreachable!(),
+                };
+                // special_data.map_animations.push(MapAnimation {
+                //     pos: pos,
+                //     clock: 0.0,
+                //     turn_off_value: 5.0,
+                //     turn_on_value: 20.0,
+                //     inactive: ASSETS.laughing_man.get("inactive"),
+                //     active: ASSETS.laughing_man.get("active"),
+                //     turn_off: ASSETS.laughing_man.get("turn_off"),
+                // });
+            }
+
+            81 => {
+                tile.particle_generator = Some(ParticleGenerator::new(
+                    pos,
+                    crate::particles::ParticleType::Acid,
+                ));
+                tile.death_cause = Some(DeathCause::Acid);
+                tile.visual
+                    .push(VisualData::Animation(&ASSETS.acid.get("surface")));
+            }
+            82 => {
+                tile.death_cause = Some(DeathCause::Acid);
+
+                tile.visual
+                    .push(VisualData::Animation(&ASSETS.acid.get("inside")));
+            }
+
+            140..160 => {
+                // enemies
+                dbg!(id);
+                let enemy = *ENEMY_IDS.get(&id).unwrap();
+                dbg!(enemy, pos, id);
+                special_data.enemies.push((enemy, pos));
+            }
+            160..180 => {
+                // enemies with tiles
+
+                let enemy = *ENEMY_IDS.get(&id).unwrap();
+                dbg!(enemy, pos, id);
+                special_data.enemies.push((enemy, pos));
+            }
+            200..220 => {
+                // one way collision
+                tile.one_way_collision = true;
+            }
+            221 => {
+                special_data.spawn_location = pos;
+            }
+            241 => tile.trigger = Some(false),
+            243 => tile.special_data.push(SpecialTileData::OutOfBounds),
+            340..360 => {
+                let pickup = match id {
+                    341 => Pickup {
+                        pickup_effect: PickupEffects::Win,
+                        origin: pos,
+                        size: ASSETS.lemon_pickup.get_size(),
+                        animation: &ASSETS.lemon_pickup,
+                    },
+                    _ => panic!(),
+                };
+                special_data.pickups.push(pickup);
+            }
+            360..380 => {
+                let boss = match id {
+                    361 => Bosses::RedGuy,
+                    _ => unreachable!(),
+                };
+                special_data.boss = Some((boss, pos));
+            }
+            380..400 => match id {
+                381 => {
+                    tile.special_data.push(SpecialTileData::Cannon);
+                }
+                382 => {
+                    tile.special_data.push(SpecialTileData::Switch);
+                }
+                _ => panic!(),
+            },
+            _ => visual = Some(id),
+        };
+        if let Some(visual) = visual {
+            tile.visual.push(VisualData::ID(visual));
+        }
+    }
     let mut special_data = SpecialData::default();
     let tilemap = &LineEnding::normalize(tilemap);
-    let tile_set_width = tileset
+    let tileset_width = tileset
         .split_once("columns=\"")
         .unwrap()
         .1
         .split_once("\"")
         .unwrap()
         .0
-        .parse::<usize>()
+        .parse::<u16>()
         .unwrap();
-    dbg!(tile_set_width);
-    fn get_area(chunks: &HashMap<(i32, i32), [u16; 256]>) -> Option<(i32, i32, i32, i32)> {
-        let posses: Vec<(i32, i32, i32, i32)> = chunks
-            .iter()
-            .map(|f| {
-                let lowest_x = f.0.0
-                    + f.1
-                        .iter()
-                        .enumerate()
-                        .filter(|f| *f.1 != 0)
-                        .map(|f| f.0 % 16)
-                        .min()
-                        .unwrap() as i32;
-                let highest_x = f.0.0
-                    + f.1
-                        .iter()
-                        .enumerate()
-                        .filter(|f| *f.1 != 0)
-                        .map(|f| f.0 % 16)
-                        .max()
-                        .unwrap() as i32;
-                let lowest_y = f.0.1
-                    + f.1
-                        .iter()
-                        .enumerate()
-                        .filter(|f| *f.1 != 0)
-                        .map(|f| f.0 / 16)
-                        .min()
-                        .unwrap() as i32;
-                let highest_y = f.0.1
-                    + f.1
-                        .iter()
-                        .enumerate()
-                        .filter(|f| *f.1 != 0)
-                        .map(|f| f.0 / 16)
-                        .max()
-                        .unwrap() as i32;
-                (lowest_x, lowest_y, highest_x, highest_y)
-            })
-            .collect();
-        dbg!(&posses);
-        if posses.is_empty() {
-            return None;
-        }
-        let lowest_x = posses.iter().map(|f| f.0).min().unwrap_or(posses[0].0);
-        let highest_x = posses.iter().map(|f| f.2).max().unwrap();
-        let lowest_y = posses.iter().map(|f| f.1).min().unwrap_or(posses[0].1);
-        let highest_y = posses.iter().map(|f| f.3).max().unwrap_or(posses[0].3);
-
-        Some((lowest_x, lowest_y, highest_x, highest_y))
-    }
-    let mut layers: Vec<(HashMap<(i32, i32), [u16; 256]>, Layer)> = Vec::new();
+    let mut end_x = i16::MIN;
+    let mut start_x = i16::MAX;
+    let mut end_y = i16::MIN;
+    let mut start_y = i16::MAX;
+    let mut special_data = SpecialData::default();
+    let mut chunks: Vec<Chunk> = Vec::new();
     for layer in tilemap.split("<layer").skip(1) {
-        let name = layer
+        let layer_name = layer
             .split_once("name=\"")
             .unwrap()
             .1
             .split_once("\"")
             .unwrap()
             .0;
-        dbg!(name);
-        let mut chunks: HashMap<(i32, i32), [u16; 256]> = HashMap::new();
+
         for chunk in layer.split("<chunk").skip(1) {
-            let x = chunk
+            let mut chunk_data = [0; 256];
+            let chunk_x: i16 = chunk
                 .split_once("x=\"")
                 .unwrap()
                 .1
                 .split_once("\"")
                 .unwrap()
                 .0
-                .parse::<i32>()
+                .parse()
                 .unwrap();
-            let y = chunk
+            let chunk_y: i16 = chunk
                 .split_once("y=\"")
                 .unwrap()
                 .1
                 .split_once("\"")
                 .unwrap()
                 .0
-                .parse::<i32>()
+                .parse()
                 .unwrap();
-
-            let chunk = chunk
+            if !chunks.iter().any(|f| f.pos == (chunk_x, chunk_y)) {
+                chunks.push(Chunk {
+                    pos: (chunk_x, chunk_y),
+                    tiles: vec![Tile::default(); 256],
+                });
+            }
+            let chunk_data = chunks
+                .iter_mut()
+                .find(|f| f.pos == (chunk_x, chunk_y))
+                .unwrap();
+            for (index, id) in chunk
                 .split_once("\n")
                 .unwrap()
                 .1
-                .split_once("\n</")
+                .split_once("\n</chunk")
                 .unwrap()
-                .0;
-            let mut data = [0; 256];
+                .0
+                .replace("\n", "")
+                .split(",")
+                .enumerate()
+            {
+                let x = index as i16 % 16 + chunk_x;
+                let y = index as i16 / 16 + chunk_y;
+                let id = id.parse().unwrap();
 
-            for (index, id) in chunk.split(",").enumerate() {
-                let id = if id.contains("\n") {
-                    &id.replace("\n", "")
-                } else {
-                    id
-                };
-                let id = id.parse::<u16>().unwrap();
-                data[index] = id;
-            }
-
-            chunks.insert((x, y), data);
-        }
-        layers.push((chunks, Layer::Collision));
-    }
-    let layers_pos: Vec<(i32, i32, i32, i32)> = layers
-        .iter()
-        .map(|f| get_area(&f.0))
-        .filter(|f| f.is_some())
-        .map(|f| f.unwrap())
-        .collect();
-
-    dbg!(&layers_pos);
-    let area: (i32, i32, i32, i32) = (
-        layers_pos.iter().map(|f| f.0).min().unwrap(),
-        layers_pos.iter().map(|f| f.1).min().unwrap(),
-        layers_pos.iter().map(|f| f.2).max().unwrap(),
-        layers_pos.iter().map(|f| f.3).max().unwrap(),
-    );
-    dbg!(area);
-    let width = area.2 + 1 - area.0;
-    let height = area.3 - area.1;
-    let mut tiles: Vec<Tile> = Vec::with_capacity(((width) * (area.3 - area.1)) as usize);
-    let mut tile_index: usize = 0;
-    for y in area.1..=area.3 {
-        for x in area.0..area.2 + 1 {
-            let mut tile = Tile {
-                ..Default::default()
-            };
-            tile_index += 1;
-            for (chunks, layer) in layers.iter() {
-                let chunk_pos = &(
-                    ((x as f32 / 16.0).floor() as i32 * 16),
-                    ((y as f32 / 16.).floor() as i32 * 16),
-                );
-
-                if let Some(chunk) = chunks.get(chunk_pos) {
-                    let id = chunk[((y.abs() % 16) * 16 + x.abs() % 16) as usize] as usize;
-
-                    let world_pos = vec2((x - area.0) as f32, (y - area.1) as f32) * TILE_SIZE;
-                    if id != 0 {
-                        let mut visual = None;
-                        match id {
-                            0..20 => {
-                                tile.collision = true;
-                                visual = Some(id);
-                            }
-                            60..80 => {
-                                let map_animation = match id {
-                                    62 => (20.0, &ASSETS.laughing_man),
-                                    _ => unreachable!(),
-                                };
-                                // special_data.map_animations.push(MapAnimation {
-                                //     pos: world_pos,
-                                //     clock: 0.0,
-                                //     turn_off_value: 5.0,
-                                //     turn_on_value: 20.0,
-                                //     inactive: ASSETS.laughing_man.get("inactive"),
-                                //     active: ASSETS.laughing_man.get("active"),
-                                //     turn_off: ASSETS.laughing_man.get("turn_off"),
-                                // });
-                            }
-                            80..100 => match id {
-                                81 => {
-                                    tile.particle_generator = Some(ParticleGenerator::new(
-                                        world_pos,
-                                        crate::particles::ParticleType::Acid,
-                                    ));
-                                    tile.death_cause = Some(DeathCause::Acid);
-                                    tile.visual
-                                        .push(VisualData::Animation(&ASSETS.acid.get("surface")));
-                                }
-                                82 => {
-                                    tile.death_cause = Some(DeathCause::Acid);
-
-                                    tile.visual
-                                        .push(VisualData::Animation(&ASSETS.acid.get("inside")));
-                                }
-                                _ => panic!(),
-                            },
-
-                            140..160 => {
-                                // enemies
-                                dbg!(id);
-                                let enemy = *ENEMY_IDS.get(&id).unwrap();
-                                dbg!(enemy, world_pos, id);
-                                special_data.enemies.push((enemy, world_pos));
-                            }
-                            160..180 => {
-                                // enemies with tiles
-
-                                let enemy = *ENEMY_IDS.get(&id).unwrap();
-                                dbg!(enemy, world_pos, id);
-                                special_data.enemies.push((enemy, world_pos));
-
-                                visual = Some(id);
-                            }
-                            200..220 => {
-                                // one way collision
-                                tile.one_way_collision = true;
-                                visual = Some(id);
-                            }
-                            221 => {
-                                special_data.spawn_location = world_pos;
-                            }
-                            241 => tile.trigger = Some(false),
-                            243 => tile.special_data.push(SpecialTileData::OutOfBounds),
-                            340..360 => {
-                                let pickup = match id {
-                                    341 => Pickup {
-                                        pickup_effect: PickupEffects::Win,
-                                        origin: world_pos,
-                                        size: ASSETS.lemon_pickup.get_size(),
-                                        animation: &ASSETS.lemon_pickup,
-                                    },
-                                    _ => panic!(),
-                                };
-                                special_data.pickups.push(pickup);
-                            }
-                            360..380 => {
-                                let boss = match id {
-                                    361 => Bosses::RedGuy,
-                                    _ => unreachable!(),
-                                };
-                                special_data.boss = Some((boss, tile_index));
-                            }
-                            380..400 => match id {
-                                381 => {
-                                    tile.special_data.push(SpecialTileData::Cannon);
-                                }
-                                382 => {
-                                    tile.special_data.push(SpecialTileData::Switch);
-                                }
-                                _ => panic!(),
-                            },
-                            _ => {
-                                visual = Some(id);
-                            }
-                        };
-                        if let Some(id) = visual {
-                            tile.visual.push(VisualData::ID(id));
-                        }
+                if id != 0 {
+                    if x > end_x {
+                        end_x = x
+                    }
+                    if x < start_x {
+                        start_x = x
+                    }
+                    if y < start_y {
+                        start_y = y
+                    }
+                    if y > end_y {
+                        end_y = y
                     }
                 }
+                let pos = vec2(x as f32, y as f32) * TILE_SIZE;
+                let mut tile = &mut chunk_data.tiles[index];
+                parse_id(&mut tile, id, &mut special_data, pos);
+                //parse id
             }
-            tiles.push(tile);
         }
     }
-    ((tiles, (width) as usize), special_data, tile_set_width)
+    (
+        Level {
+            chunks,
+            tileset_width,
+        },
+        special_data,
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -422,75 +369,51 @@ pub fn update_pickups(game: &mut Game) {
 pub struct SpecialData {
     pub spawn_location: Vec2,
     pub enemies: Vec<(PresetEnemies, Vec2)>,
-    pub boss: Option<(Bosses, usize)>,
-    pub map_animations: Vec<MapAnimation>,
+    pub boss: Option<(Bosses, Vec2)>,
     pub pickups: Vec<Pickup>,
 }
 pub struct Level {
-    pub tiles: Vec<Tile>,
-    pub width: usize,
-    pub world_size: Vec2,
-    tileset_width: usize,
+    pub chunks: Vec<Chunk>, //pub width: usize,
+    //pub world_size: Vec2,
+    //pub map_animations: Vec<MapAnimation>,
+    tileset_width: u16,
 }
 impl Level {
-    pub fn new(level: Levels) -> (Self, SpecialData) {
-        let data = match level {
-            Levels::TestLevel => include_str!("../assets/testlvl.tmx"),
-        };
-        let (map, special_data, tileset_width) =
-            load_tilemap(data, include_str!("../assets/tileset.tsx"));
-        let height = map.0.len() as f32 / map.1 as f32;
-        (
-            Self {
-                tileset_width,
-                tiles: map.0,
-                width: map.1,
-                world_size: vec2(map.1 as f32 * TILE_SIZE, height * TILE_SIZE),
-            },
-            special_data,
-        )
-    }
-    fn draw(&self, tile_data: &VisualData, index: usize) {
-        let pos = vec2(
-            (index % self.width) as f32 * TILE_SIZE,
-            (index / self.width) as f32 * TILE_SIZE,
-        );
-        match tile_data {
-            VisualData::Animation(animation) => {
-                animation.play(
-                    pos,
-                    Some(DrawTextureParams {
-                        dest_size: Some(vec2(TILE_SIZE, TILE_SIZE)),
-                        ..Default::default()
-                    }),
-                );
-            }
-            VisualData::ID(id) => {
-                let id = id - 1;
-                ASSETS.spritesheet.draw_from(
-                    (id % self.tileset_width, id / self.tileset_width),
-                    pos,
-                    Some(DrawTextureParams {
-                        dest_size: Some(vec2(TILE_SIZE, TILE_SIZE)),
-                        ..Default::default()
-                    }),
-                );
-            }
-        }
-    }
     pub fn draw_level(&self) {
-        for (index, tile) in self.tiles.iter().enumerate() {
-            for tile_data in tile.visual.iter() {
-                self.draw(tile_data, index);
+        for chunk in &self.chunks {
+            for (index, tile) in chunk.tiles.iter().enumerate() {
+                let pos = vec2(
+                    (chunk.pos.0 + index as i16 % 16) as f32,
+                    (chunk.pos.1 + index as i16 / 16) as f32,
+                ) * TILE_SIZE;
+                for visual in &tile.visual {
+                    match visual {
+                        VisualData::Animation(animation) => {
+                            animation.play(
+                                pos,
+                                Some(DrawTextureParams {
+                                    dest_size: Some(vec2(TILE_SIZE, TILE_SIZE)),
+                                    ..Default::default()
+                                }),
+                            );
+                        }
+                        VisualData::ID(id) => {
+                            if *id == 0 {
+                                continue;
+                            }
+                            let id = id - 1;
+                            ASSETS.spritesheet.draw_from(
+                                (id % self.tileset_width, id / self.tileset_width),
+                                pos,
+                                Some(DrawTextureParams {
+                                    dest_size: Some(vec2(TILE_SIZE, TILE_SIZE)),
+                                    ..Default::default()
+                                }),
+                            );
+                        }
+                    }
+                }
             }
-            // draw_rectangle(-400.0, -400.0, self.world_size.x + 400.0, 400.0, BLACK);
-            // draw_rectangle(
-            //     -400.0,
-            //     self.world_size.y,
-            //     self.world_size.x + 400.0,
-            //     400.0,
-            //     BLACK,
-            // );
         }
     }
 }

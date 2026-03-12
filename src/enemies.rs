@@ -1,17 +1,9 @@
-use std::{collections::HashMap, f32::consts::PI, sync::LazyLock};
+use std::{collections::HashMap, f32::consts::PI, panic, sync::LazyLock};
 
 use macroquad::prelude::*;
 
-use crate::{
-    assets::ASSETS,
-    enemies,
-    level::{self, Level, MAP_SCALE_FACTOR, SpecialTileData, TILE_SIZE, VisualData},
-    particles::{Particle, Particles},
-    player::{DeathCause, Player},
-    projectiles::Projectile,
-    utils::*,
-};
-pub static ENEMY_IDS: LazyLock<HashMap<usize, PresetEnemies>> = LazyLock::new(|| {
+use crate::{assets::ASSETS, level::Level, player::Player, projectiles::Projectile, utils::*};
+pub static ENEMY_IDS: LazyLock<HashMap<u16, PresetEnemies>> = LazyLock::new(|| {
     HashMap::from([
         (141, PresetEnemies::Jetpacker),
         (142, PresetEnemies::SpikeBall),
@@ -61,6 +53,20 @@ fn check_map_collision(pos: Vec2, size: Vec2, map: &Level) -> bool {
     ];
     return points.iter().any(|f| check_collision(*f, map));
 }
+fn draw_path(path: Vec<Vec2>) {
+    let mut iter = path.iter();
+    while let Some(p) = iter.next() {
+        dbg!(p);
+        if let Some(p2) = iter.next() {
+            for y in 0..((p2.y - p.y) as i8 / 16) {
+                for x in 0..((p2.x - p.x) as i8 / 16) {
+                    dbg!(x, y);
+                    draw_rectangle(x as f32 * 16.0, y as f32 * 16.0, 16.0, 16.0, GREEN);
+                }
+            }
+        }
+    }
+}
 pub fn check_collision_with_size(obj1: (Vec2, Vec2), obj2: (Vec2, Vec2)) -> bool {
     let points = [
         vec2(obj1.0.x, obj1.0.y),
@@ -102,11 +108,7 @@ pub enum CollisionType<'a> {
     Map,
     Enemy(&'a mut NewEnemy),
 }
-impl<'a> CollisionType<'a> {
-    fn is_same(&self, obj2: &Self) -> bool {
-        std::mem::discriminant(self) == std::mem::discriminant(obj2)
-    }
-}
+
 pub fn update_enemies(
     enemies: &mut Vec<NewEnemy>,
     player: &Player,
@@ -158,6 +160,7 @@ impl NewEnemy {
     pub fn from(preset: PresetEnemies, pos: Vec2, level: &Level) -> Self {
         let behaviour: Box<dyn EnemyBehaviour>;
         let size;
+        dbg!(preset);
         match preset {
             PresetEnemies::Jetpacker => {
                 size = ASSETS.jetpacker.get_size();
@@ -167,7 +170,16 @@ impl NewEnemy {
                 behaviour = Box::new(Fish::new(pos, level));
                 size = ASSETS.fish.get_size();
             }
-            _ => panic!(),
+            PresetEnemies::BombChain => {
+                behaviour = Box::new(BombChain::new(pos, level));
+                size = Vec2::ZERO
+            }
+            PresetEnemies::FireWagon => {
+                behaviour = Box::new(FireWagon::new(pos, level));
+                size = ASSETS.fire_wagon.get_size();
+            }
+            PresetEnemies::SpikeBall => todo!(),
+            PresetEnemies::MachineGunner => todo!(),
         };
         Self {
             pos,
@@ -179,32 +191,33 @@ impl NewEnemy {
 impl EnemyBehaviour for Fish {
     fn new(pos: Vec2, map: &Level) -> Self {
         {
-            let mut start_x = to_world_pos(pos, map.width);
-            let mut end_x = start_x;
+            // let mut start_x = to_world_pos(pos, map.width);
+            // let mut end_x = start_x;
 
-            while map.tiles[start_x]
-                .special_data
-                .iter()
-                .any(|f| *f == SpecialTileData::Path)
-            {
-                start_x -= 1;
-            }
-            while map.tiles[end_x]
-                .special_data
-                .iter()
-                .any(|f| *f == SpecialTileData::Path)
-            {
-                end_x += 1;
-            }
-            Self {
-                origin: pos,
-                direction: 60.0,
-                attack_clock: 0.0,
-                attack_cooldown: 0.0,
-                is_attacking: false,
+            // while map.tiles[start_x]
+            //     .special_data
+            //     .iter()
+            //     .any(|f| *f == SpecialTileData::Path)
+            // {
+            //     start_x -= 1;
+            // }
+            // while map.tiles[end_x]
+            //     .special_data
+            //     .iter()
+            //     .any(|f| *f == SpecialTileData::Path)
+            // {
+            //     end_x += 1;
+            // }
+            // Self {
+            //     origin: pos,
+            //     direction: 60.0,
+            //     attack_clock: 0.0,
+            //     attack_cooldown: 0.0,
+            //     is_attacking: false,
 
-                size: ASSETS.fish.get_size(),
-            }
+            //     size: ASSETS.fish.get_size(),
+            // }
+            panic!()
         }
     }
 
@@ -253,46 +266,47 @@ impl EnemyBehaviour for Fish {
             if shader {
                 gl_use_default_material();
             }
-        } else {
-            'wa: {
-                let tile = to_world_pos(
-                    vec2(
-                        pos.x
-                            + self.direction * frame_time
-                            + if self.direction.is_sign_positive() {
-                                self.size.x
-                            } else {
-                                0.0
-                            },
-                        self.origin.y,
-                    ),
-                    map.width,
-                );
+            // } else {
+            //     'wa: {
+            //         let tile = to_world_pos(
+            //             vec2(
+            //                 pos.x
+            //                     + self.direction * frame_time
+            //                     + if self.direction.is_sign_positive() {
+            //                         self.size.x
+            //                     } else {
+            //                         0.0
+            //                     },
+            //                 self.origin.y,
+            //             ),
+            //             map.width,
+            //         );
 
-                if (player.pos.x - (pos.x + self.size.x)).abs() < 20.0
-                    && self.attack_cooldown <= 0.0
-                {
-                    dbg!("attacking");
-                    self.is_attacking = true;
-                    self.attack_cooldown = 5.0;
-                } else {
-                    ASSETS.fish.get("bubbles").play(*pos, None);
-                    if tile + 1 > map.tiles.len() {
-                        dbg!("out of bounds fish");
-                        break 'wa;
-                    }
-                    if !map.tiles[tile]
-                        .special_data
-                        .iter()
-                        .any(|f| *f == SpecialTileData::Acid)
-                    {
-                        dbg!("beep bepp");
-                        self.direction *= -1.0;
-                    } else {
-                        pos.x += self.direction * frame_time;
-                    }
-                }
-            }
+            //         if (player.pos.x - (pos.x + self.size.x)).abs() < 20.0
+            //             && self.attack_cooldown <= 0.0
+            //         {
+            //             dbg!("attacking");
+            //             self.is_attacking = true;
+            //             self.attack_cooldown = 5.0;
+            //         } else {
+            //             ASSETS.fish.get("bubbles").play(*pos, None);
+            //             if tile + 1 > map.tiles.len() {
+            //                 dbg!("out of bounds fish");
+            //                 break 'wa;
+            //             }
+            //             if !map.tiles[tile]
+            //                 .special_data
+            //                 .iter()
+            //                 .any(|f| *f == SpecialTileData::Acid)
+            //             {
+            //                 //dbg!("beep bepp");
+            //                 //dbg!(tile);
+            //                 //dbg!(self.origin.y);
+            //                 self.direction *= -1.0;
+            //             } else {
+            //                 pos.x += self.direction * frame_time;
+            //             }
+            //         }
         }
     }
 }
@@ -303,7 +317,10 @@ struct FireWagon {
 }
 impl EnemyBehaviour for FireWagon {
     fn new(pos: Vec2, level: &Level) -> Self {
-        panic!()
+        Self {
+            direction: vec2(1.0, 0.0),
+            speed: 20.0,
+        }
     }
 
     fn update(
@@ -489,42 +506,50 @@ struct Jetpacker {
 
 impl EnemyBehaviour for Jetpacker {
     fn new(pos: Vec2, map: &Level) -> Self {
-        let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
-        let mut tile = (map_pos.y as usize + 2) * map.width as usize + map_pos.x as usize;
-        let ground_animation = if map.tiles[tile].collision {
-            &ASSETS.jetpacker.get("idle")
-        } else {
-            &ASSETS.jetpacker.get("fly")
-        };
-        tile = tile - 3 * map.width as usize;
-        let mut fly_height = 0.0;
-        while map.tiles[tile]
-            .visual
-            .iter()
-            .any(|f| *f == VisualData::ID(240))
-        {
-            println!("path above at tile {}", tile);
-            tile = tile - map.width as usize;
-            fly_height -= TILE_SIZE * MAP_SCALE_FACTOR;
-        }
-        let flight_speed = -50.0;
-        let flight_time = (fly_height / flight_speed).abs();
+        // let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
+        // let mut tile = (map_pos.y as usize) * map.width as usize + map_pos.x as usize;
+        // let ground_animation = if map.tiles[tile].collision {
+        //     &ASSETS.jetpacker.get("idle")
+        // } else {
+        //     &ASSETS.jetpacker.get("fly")
+        // };
+        // tile = tile - 2 * map.width as usize;
+        // for i in 0..10 {
+        //     dbg!(&map.tiles[tile + 3 - i].special_data);
+        // }
+        // let wa = to_game_pos(tile, map);
+        // dbg!(wa);
+        // draw_rectangle(wa.x, wa.y, 16.0, 16.0, WHITE);
 
-        dbg!(flight_time);
-        let animation = ASSETS.jetpacker.get("fly");
-        let curve: [(f32, f32, &Animation, bool); 6] = [
-            (0.0, 0.0, ground_animation, false),
-            (1.5, 0.0, animation, false),
-            (flight_time + 1.5, fly_height, animation, false),
-            (flight_time + 2.5 + 1.5, fly_height, animation, true),
-            (flight_time + 4.0 + 1.5, fly_height, animation, false),
-            (flight_time + 5.0 + 1.5, 0.0, animation, false),
-        ];
+        // dbg!(tile, &map.tiles[tile].visual);
+        // let fly_height = 0.0;
+        // while map.tiles[tile]
+        //     .visual
+        //     .iter()
+        //     .any(|f| *f == VisualData::ID(240))
+        // {
+        //     panic!("path above at tile {}", tile);
+        //     tile = tile - map.width as usize;
+        //     fly_height -= TILE_SIZE * MAP_SCALE_FACTOR;
+        // }
+        // let flight_speed = -50.0;
+        // let flight_time = (fly_height / flight_speed).abs();
+
+        // dbg!(flight_time);
+        // let animation = ASSETS.jetpacker.get("fly");
+        // let curve: [(f32, f32, &Animation, bool); 6] = [
+        //     (0.0, 0.0, ground_animation, false),
+        //     (1.5, 0.0, animation, false),
+        //     (flight_time + 1.5, fly_height, animation, false),
+        //     (flight_time + 2.5 + 1.5, fly_height, animation, true),
+        //     (flight_time + 4.0 + 1.5, fly_height, animation, false),
+        //     (flight_time + 5.0 + 1.5, 0.0, animation, false),
+        // ];
         Self {
             state: (JetpackerState::Normal, 0.0),
             fall_velocity: 0.0,
 
-            behavior_curve: curve,
+            behavior_curve: panic!(),
             flipped: false,
             attacked: false,
             origin: pos,
@@ -540,6 +565,14 @@ impl EnemyBehaviour for Jetpacker {
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
     ) {
+        if DEBUG_FLAGS.show_path {
+            draw_path(
+                self.behavior_curve
+                    .iter()
+                    .map(|f| vec2(self.origin.x, self.origin.y + f.1))
+                    .collect(),
+            );
+        }
         self.state.1 += frame_time;
         if pos.y > self.origin.y {
             *pos = self.origin;

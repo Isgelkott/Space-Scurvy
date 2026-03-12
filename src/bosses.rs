@@ -12,29 +12,30 @@ use crate::{
     utils::*,
 };
 fn find_special_tile_data(level: &Level, data: SpecialTileData) -> Vec2 {
-    to_game_pos(
-        level
-            .tiles
-            .iter()
-            .enumerate()
-            .find(|f| f.1.special_data.iter().any(|f| *f == data))
-            .unwrap()
-            .0,
-        level,
-    )
+    panic!()
+    // to_game_pos(
+    //     level
+    //         .tiles
+    //         .iter()
+    //         .enumerate()
+    //         .find(|f| f.1.special_data.iter().any(|f| *f == data))
+    //         .unwrap()
+    //         .0,
+    //     level,
+    // )
 }
 pub enum Bosses {
     RedGuy,
 }
 impl Bosses {
-    pub fn to_boss(&self, tile: usize, level: &Level) -> Box<dyn Boss> {
+    pub fn to_boss(&self, pos: Vec2, level: &Level) -> Box<dyn Boss> {
         match self {
-            Bosses::RedGuy => RedGuy::new(tile, level),
+            Bosses::RedGuy => RedGuy::new(pos, level),
         }
     }
 }
 pub trait Boss {
-    fn new(tile: usize, level: &Level) -> Box<dyn Boss>
+    fn new(tile: Vec2, level: &Level) -> Box<dyn Boss>
     where
         Self: Sized;
     fn update(
@@ -239,87 +240,88 @@ impl RedGuy {
     }
 }
 impl Boss for RedGuy {
-    fn new(tile: usize, level: &Level) -> Box<dyn Boss> {
-        fn valid_tiles_around(tile: usize, level: &Level) -> Vec<usize> {
-            let mut without_collision = Vec::new();
-            let tiles = [
-                tile.saturating_sub(level.width),
-                tile + level.width,
-                tile.saturating_sub(1),
-                tile + 1,
-            ];
-            for tile in tiles {
-                if tile > level.tiles.len() {
-                    break;
-                }
-                let object = &level.tiles[tile];
-                if !(object.collision
-                    || object
-                        .special_data
-                        .iter()
-                        .any(|f| *f == SpecialTileData::OutOfBounds))
-                {
-                    without_collision.push(tile);
-                }
-            }
-            without_collision
-        }
-        let mut min_x = tile % level.width;
-        let mut max_x = min_x;
-        let mut min_y = tile / level.width;
-        let mut max_y = min_y;
-        let mut tiles = vec![tile];
-        let mut checked = HashSet::new();
-        while !tiles.is_empty() {
-            let mut buffer = Vec::new();
-            tiles.retain_mut(|tile| {
-                if checked.contains(tile) {
-                    return false;
-                }
-                checked.insert(*tile);
-                min_x = min_x.min(*tile % level.width);
-                max_x = max_x.max(min_x);
-                min_y = min_y.min(*tile / level.width);
-                max_y = max_y.max(*tile / level.width);
-                for neighbour in valid_tiles_around(*tile, level) {
-                    buffer.push(neighbour);
-                }
-                return false;
-            });
-            tiles.append(&mut buffer);
-        }
+    fn new(pos: Vec2, level: &Level) -> Box<dyn Boss> {
+        panic!()
+        // fn valid_tiles_around(tile: usize, level: &Level) -> Vec<usize> {
+        //     let mut without_collision = Vec::new();
+        //     let tiles = [
+        //         tile.saturating_sub(level.width),
+        //         tile + level.width,
+        //         tile.saturating_sub(1),
+        //         tile + 1,
+        //     ];
+        //     for tile in tiles {
+        //         if tile > level.tiles.len() {
+        //             break;
+        //         }
+        //         let object = &level.tiles[tile];
+        //         if !(object.collision
+        //             || object
+        //                 .special_data
+        //                 .iter()
+        //                 .any(|f| *f == SpecialTileData::OutOfBounds))
+        //         {
+        //             without_collision.push(tile);
+        //         }
+        //     }
+        //     without_collision
+        // }
+        // let mut min_x = tile % level.width;
+        // let mut max_x = min_x;
+        // let mut min_y = tile / level.width;
+        // let mut max_y = min_y;
+        // let mut tiles = vec![tile];
+        // let mut checked = HashSet::new();
+        // while !tiles.is_empty() {
+        //     let mut buffer = Vec::new();
+        //     tiles.retain_mut(|tile| {
+        //         if checked.contains(tile) {
+        //             return false;
+        //         }
+        //         checked.insert(*tile);
+        //         min_x = min_x.min(*tile % level.width);
+        //         max_x = max_x.max(min_x);
+        //         min_y = min_y.min(*tile / level.width);
+        //         max_y = max_y.max(*tile / level.width);
+        //         for neighbour in valid_tiles_around(*tile, level) {
+        //             buffer.push(neighbour);
+        //         }
+        //         return false;
+        //     });
+        //     tiles.append(&mut buffer);
+        // }
 
-        Box::new(Self {
-            cannon: Cannon::new(
-                to_game_pos(
-                    level
-                        .tiles
-                        .iter()
-                        .enumerate()
-                        .find(|f| {
-                            f.1.special_data
-                                .iter()
-                                .any(|f| *f == SpecialTileData::Cannon)
-                        })
-                        .unwrap()
-                        .0,
-                    level,
-                ) - vec2(0.0, ASSETS.cannon.get_size().y),
-                level,
-            ),
-            incoming_rocket: None,
-            fallings_enemeies: Vec::new(),
-            attack_cooldowns: Vec::new(),
-            catapult: load_pixel_map(&ASSETS.red_boss.get("catapult"), [61, 61, 61, 255]),
-            crane: Self::get_crane(),
-            actions: vec![(RedGuyPhase::Entry, 0.0)],
-            pos: to_game_pos(tile, level),
+        // Box::new(Self {
+        //     cannon: Cannon::new(
+        //         to_game_pos(
+        //             level
+        //                 .tiles
+        //                 .iter()
+        //                 .enumerate()
+        //                 .find(|f| {
+        //                     f.1.special_data
+        //                         .iter()
+        //                         .any(|f| *f == SpecialTileData::Cannon)
+        //                 })
+        //                 .unwrap()
+        //                 .0,
+        //             level,
+        //         ) - vec2(0.0, ASSETS.cannon.get_size().y),
+        //         level,
+        //     ),
+        //     incoming_rocket: None,
+        //     fallings_enemeies: Vec::new(),
+        //     attack_cooldowns: Vec::new(),
+        //     catapult: load_pixel_map(&ASSETS.red_boss.get("catapult"), [61, 61, 61, 255]),
+        //     crane: Self::get_crane(),
+        //     actions: vec![(RedGuyPhase::Entry, 0.0)],
+        //     pos: to_game_pos(tile, level),
 
-            allowed_area: (
-                vec2(min_x as f32 * TILE_SIZE, min_y as f32 * TILE_SIZE),
-                vec2(max_x as f32 * TILE_SIZE, max_y as f32 * TILE_SIZE),
-            ),
-        })
+        //     allowed_area: (
+        //         vec2(min_x as f32 * TILE_SIZE, min_y as f32 * TILE_SIZE),
+        //         vec2(max_x as f32 * TILE_SIZE, max_y as f32 * TILE_SIZE),
+        //     ),
+        // })
     }
 
     fn update(
