@@ -34,9 +34,12 @@ impl CameraHolder {
     fn update(&mut self, player: &Player) {
         //dbg!(self.pos.y, self.desired_y);
         const Y_SPEED: f32 = 0.5;
-        const Y_BELOW_THRESHOLD: f32 = 30.0;
-        if player.pos.y + SCREEN_SIZE.1 / 2.0 + Y_BELOW_THRESHOLD > self.pos.y + SCREEN_SIZE.1 {
-            self.pos.y = player.pos.y + player.velocity.y - 20.0 - SCREEN_SIZE.1 * 2.0;
+        
+        if player.pos.y - SCREEN_SIZE.1 / 2.0 + player.size.y > self.pos.y  {
+            dbg!(self.pos.y);
+            self.pos.y = player.pos.y  ;
+            dbg!(self.pos.y);
+        
             self.desired_y = self.pos.y
         }
         if (self.pos.y - self.desired_y).abs() > 5.0 {

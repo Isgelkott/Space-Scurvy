@@ -143,7 +143,6 @@ impl Player {
             //     });
             //     to_check.append(&mut buffer);
             // }
-            dbg!((self.velocity));
 
             for y in 0..(self.size.y / 16.0) as i16 + 1 {
                 let y = ((y * 16) as f32).min(self.size.y);
@@ -157,7 +156,6 @@ impl Player {
                     if x != 0.0 && map_pos.x.fract() == 0.0 {
                         map_pos.x -= 1.0;
                     }
-                    dbg!(map_pos);
                     let (tile) = get_tile(map_pos, level);
                     if let Some((tile, tile_pos)) = tile {
                         if tile.collision {
@@ -166,7 +164,6 @@ impl Player {
                                 draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, BLUE);
                             }
 
-                            dbg!("collid y");
                             self.pos.y = self
                                 .pos
                                 .y
@@ -200,13 +197,13 @@ impl Player {
                         map_pos.x -= 1.0;
                     }
                     let (tile) = get_tile(map_pos, level);
+                
                     if let Some((tile, tile_pos)) = tile {
                         if tile.collision {
                             if DEBUG_FLAGS.show_collisions {
                                 draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, YELLOW);
                             }
 
-                            dbg!("collid x");
                             let x1 = tile_pos.x - point.0;
                             let x2 = tile_pos.x + TILE_SIZE - point.0;
                             if (x1 - self.pos.x).abs() < (x2 - self.pos.x).abs() {
