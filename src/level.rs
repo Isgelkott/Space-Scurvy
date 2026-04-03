@@ -8,10 +8,9 @@ use crate::{
     utils::{Animation, AnimationMethods},
 };
 use line_ending::LineEnding;
-use macroquad::prelude::*;
+use macroquad::{prelude::*, rand::gen_range};
 use std::{
-    collections::{HashMap, HashSet},
-    fmt::{Debug, write},
+    fmt::Debug,
     panic,
 };
 pub const TILE_SIZE: f32 = 16.0;
@@ -66,10 +65,18 @@ pub struct MapAnimation {
 impl MapAnimation {
     pub fn new(pos: Vec2, animation: &'static Animation) -> Self {
         Self {
-            clock: 0.0,
+            clock: gen_range(0., animation.get_duration()),
             animation,
             pos,
         }
+    }
+    pub fn update(&mut self, frame_time:f32){
+        self.clock+= frame_time;
+        if self.clock > self.animation.get_duration(){
+            self.clock = 0.;
+        }   
+              self.animation.play_with_clock(self.pos, self.clock, None);
+
     }
 }
 #[derive(Default, Clone)]
@@ -99,11 +106,13 @@ pub struct Chunk {
 }
 
 pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
-    fn parse_id(tile: &mut Tile, mut id: u16, special_data: &mut SpecialData, pos: Vec2) {
+    fn parse_id(tile: &mut Tile, id: u16, special_data: &mut SpecialData, pos: Vec2) {
         let mut visual = None;
         if id == 0 {
             return;
         }
+            #[allow(non_contiguous_range_endpoints)]
+
         match id {
             1..20 => {
                 tile.collision = true;
@@ -111,18 +120,11 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
             }
             60..80 => {
                 let map_animation = match id {
-                    62 => (20.0, &ASSETS.laughing_man),
-                    _ => unreachable!(),
+                    62 =>  &ASSETS.laughing_man,
+                    _=> panic!()
                 };
-                // special_data.map_animations.push(MapAnimation {
-                //     pos: pos,
-                //     clock: 0.0,
-                //     turn_off_value: 5.0,
-                //     turn_on_value: 20.0,
-                //     inactive: ASSETS.laughing_man.get("inactive"),
-                //     active: ASSETS.laughing_man.get("active"),
-                //     turn_off: ASSETS.laughing_man.get("turn_off"),
-                // });
+                special_data.map_animations.push(MapAnimation::new(pos, map_animation.base()));
+          
             }
 
             81 => {
@@ -198,7 +200,6 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
             tile.visual.push(VisualData::ID(visual));
         }
     }
-    let mut special_data = SpecialData::default();
     let tilemap = &LineEnding::normalize(tilemap);
     let tileset_width = tileset
         .split_once("columns=\"")
@@ -286,7 +287,6 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
                 let pos = vec2(x as f32, y as f32) * TILE_SIZE;
                 let mut tile = &mut chunk_data.tiles[index];
                 parse_id(&mut tile, id, &mut special_data, pos);
-                //parse id
             }
         }
     }
@@ -303,41 +303,8 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
 pub enum Levels {
     TestLevel,
 }
-// pub struct MapAnimation {
-//     pos: Vec2,
-//     clock: f32,
-//     turn_off_value: f32,
-//     turn_on_value: f32,
-//     inactive: &'static Animation,
-//     active: &'static Animation,
-//     turn_off: &'static Animation,
-// }
-// impl MapAnimation {
-//     fn update(&mut self) {
-//         self.clock += frame_time;
-//         if self.clock > self.turn_on_value {
-//             self.clock = 0.0;
-//             self.inactive.play(self.pos, None);
-//         } else if self.clock > self.turn_off_value + self.turn_off.1 as f32 / 1000.0 {
-//             self.inactive.play(self.pos, None);
-//         } else if self.clock > self.turn_off_value {
-//             self.turn_off
-//                 .play_with_clock(self.pos, self.clock - self.turn_off_value, None);
-//         } else {
-//             self.active.play(self.pos, None);
-//         }
-//     }
-// }
-pub fn update_map_animations(animations: &mut Vec<MapAnimation>) {
-    animations.retain_mut(|f| {
-        if f.clock > f.animation.get_duration() {
-            return false;
-        } else {
-            f.animation.play_with_clock(f.pos, f.clock, None);
-            return true;
-        }
-    });
-}
+
+
 #[derive(PartialEq)]
 enum PickupEffects {
     Win,
@@ -371,6 +338,7 @@ pub struct SpecialData {
     pub enemies: Vec<(PresetEnemies, Vec2)>,
     pub boss: Option<(Bosses, Vec2)>,
     pub pickups: Vec<Pickup>,
+    pub map_animations: Vec<MapAnimation>
 }
 pub struct Level {
     pub chunks: Vec<Chunk>, //pub width: usize,

@@ -32,13 +32,10 @@ struct CameraHolder {
 }
 impl CameraHolder {
     fn update(&mut self, player: &Player) {
-        //dbg!(self.pos.y, self.desired_y);
         const Y_SPEED: f32 = 0.5;
         
         if player.pos.y - SCREEN_SIZE.1 / 2.0 + player.size.y > self.pos.y  {
-            dbg!(self.pos.y);
             self.pos.y = player.pos.y  ;
-            dbg!(self.pos.y);
         
             self.desired_y = self.pos.y
         }
@@ -49,7 +46,7 @@ impl CameraHolder {
         const MAX_FORESIGHT: f32 = FORESIGHT * 3.5;
         const X_SPEED: f32 = 1.2;
 
-        let desired_x = (player.pos.x + player.velocity.x * FORESIGHT);
+        let desired_x = player.pos.x + player.velocity.x * FORESIGHT;
         if (desired_x - player.pos.x).abs() > (self.pos.x - player.pos.x).abs() {
             let speed = X_SPEED
                 * if (desired_x - player.pos.x).signum() != (self.pos.x - player.pos.x).signum() {
@@ -68,14 +65,8 @@ impl CameraHolder {
         //self.pos = self.pos.round();
     }
     fn calculate_y_up(&mut self, player: &Player) {
-        const THRESHOLD: f32 = 100.0;
-        self.desired_y = player.pos.y - 17.5;
-
-        if player.pos.y < self.pos.y - THRESHOLD + SCREEN_SIZE.1 / 2.0 {
-            //dbg!(player.pos.y);
-        } else {
-            //dbg!(player.pos.y + SCREEN_SIZE.1, self.pos.y - THRESHOLD);
-        }
+        const CAMERA_Y_OFFSET:f32 = 17.5;
+        self.desired_y = player.pos.y - CAMERA_Y_OFFSET;
     }
 }
 
@@ -86,13 +77,12 @@ pub struct Game {
     map: Level,
     backgrounds: Background,
     player: Player,
-    camera: CameraHolder,
+    camera_holder: CameraHolder,
     enemies: Vec<NewEnemy>,
     boss: Option<Box<dyn Boss>>,
     pickups: Vec<Pickup>,
     projectiles: Vec<Projectile>,
     particles: Vec<Particle>,
-    // map_animations: Vec<MapAnimation>,
     map_animations: Vec<MapAnimation>,
 }
 impl Game {
@@ -117,7 +107,7 @@ impl Game {
             );
         }
         gl_use_default_material();
-        set_camera(&self.camera.camera);
+        set_camera(&self.camera_holder.camera);
     }
 
     fn new(level: Levels) -> Self {
@@ -142,12 +132,11 @@ impl Game {
             scale_factor: 1.0,
             particles: Vec::new(),
             projectiles: Vec::new(),
-            // map_animations: special_data.map_animations,
-            map_animations: Vec::new(),
+            map_animations: special_data.map_animations,
             enemies,
             map,
             player: Player::new(special_data.spawn_location),
-            camera: CameraHolder {
+            camera_holder: CameraHolder {
                 desired_y: special_data.spawn_location.y,
                 camera: create_camera(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1)),
                 pos: special_data.spawn_location,
@@ -162,7 +151,7 @@ impl Game {
             .min(screen_height() / SCREEN_SIZE.1)
             .floor();
         draw_texture_ex(
-            &self.camera.camera.render_target.as_ref().unwrap().texture,
+            &self.camera_holder.camera.render_target.as_ref().unwrap().texture,
             0.0,
             0.0,
             WHITE,
@@ -224,8 +213,9 @@ impl Game {
             );
         }
         self.map.draw_level();
-        update_map_animations(&mut self.map_animations);
-
+        for map_animation in self.map_animations.iter_mut(){
+            map_animation.update(frame_time);
+        }
         // update_projectiles(
         //     &mut self.player,
         //     &self.map,
@@ -242,9 +232,9 @@ impl Game {
                 &mut self.enemies,
                 &mut self.particles,
                 frame_time,
-                &mut self.camera,
+                &mut self.camera_holder,
             );
-            self.camera.update(&self.player);
+            self.camera_holder.update(&self.player);
         }
         #[cfg(debug_assertions)]
         {
@@ -252,10 +242,10 @@ impl Game {
                 dbg!(self.player.pos);
             }
             if is_key_down(KeyCode::Minus) {
-                dbg!(self.camera.pos);
+                dbg!(self.camera_holder.pos);
             }
         }
-        self.camera.camera.target = self.camera.pos;
+        self.camera_holder.camera.target = self.camera_holder.pos;
 
         update_pickups(self);
         update_enemies(
@@ -316,7 +306,7 @@ impl GameManger {
         }
     }
     async fn update(&mut self) {
-        set_camera(&self.game.camera.camera);
+        set_camera(&self.game.camera_holder.camera);
         if self.game.die {
             self.die_screen();
         } else {
