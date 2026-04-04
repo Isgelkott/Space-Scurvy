@@ -82,8 +82,12 @@ pub struct Tile {
     pub particle_generator: Option<ParticleGenerator>,
     pub trigger: Option<bool>,
     pub trigger_behaviour: Option<TriggerBehaviour>,
+    pub ground: bool,
 }
 impl Tile {
+    pub fn has_special(&self, special: SpecialTileData) -> bool {
+        self.special_data.iter().any(|f| matches!(f, special))
+    }
     fn trigger(&mut self, pos: Vec2, map_animations: &mut Vec<MapAnimation>) {
         let trigger_behaviour = self.trigger_behaviour.as_ref().unwrap();
         match trigger_behaviour {
@@ -97,9 +101,14 @@ pub struct Chunk {
     pub pos: (i16, i16),
     pub tiles: Vec<Tile>,
 }
-
+pub fn floored_pos(pos: Vec2) -> Vec2 {
+    return vec2(
+        (pos.x / TILE_SIZE).floor() * TILE_SIZE,
+        (pos.y / TILE_SIZE).floor() * TILE_SIZE,
+    );
+}
 pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
-    fn parse_id(tile: &mut Tile, mut id: u16, special_data: &mut SpecialData, pos: Vec2) {
+    fn parse_id(tile: &mut Tile, id: u16, special_data: &mut SpecialData, pos: Vec2) {
         let mut visual = None;
         if id == 0 {
             return;
@@ -162,7 +171,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
             221 => {
                 special_data.spawn_location = pos;
             }
-            241 => tile.trigger = Some(false),
+            241 => tile.special_data.push(SpecialTileData::Path),
             243 => tile.special_data.push(SpecialTileData::OutOfBounds),
             340..360 => {
                 let pickup = match id {
@@ -192,6 +201,11 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
                 }
                 _ => panic!(),
             },
+            480..500 => {
+                tile.ground = true;
+                visual = Some(id);
+                tile.collision = true;
+            }
             _ => visual = Some(id),
         };
         if let Some(visual) = visual {
@@ -379,6 +393,19 @@ pub struct Level {
     tileset_width: u16,
 }
 impl Level {
+    pub fn get_tile(&self, pos: Vec2) -> Option<&Tile> {
+        let ipos = ((pos.x / TILE_SIZE) as i16, (pos.y / TILE_SIZE) as i16);
+        let chunk_x = ((ipos.0 as f32 / 16.0).floor() * 16.0) as i16;
+        let chunk_y = ((ipos.1 as f32 / 16.0).floor() * 16.0) as i16;
+        if let Some(chunk) = self.chunks.iter().find(|f| f.pos == (chunk_x, chunk_y)) {
+            let local_x = ipos.0 - chunk_x;
+            assert!(!local_x.is_negative());
+            let local_y = ipos.1 - chunk_y;
+            let index = (local_x % 16 + local_y * 16) as usize;
+            return Some(&chunk.tiles[index]);
+        }
+        return None;
+    }
     pub fn draw_level(&self) {
         for chunk in &self.chunks {
             for (index, tile) in chunk.tiles.iter().enumerate() {

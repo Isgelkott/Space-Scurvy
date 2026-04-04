@@ -16,7 +16,7 @@ pub struct Player {
     pub pos: Vec2,
     pub size: Vec2,
     pub velocity: Vec2,
-    grounded: bool,
+    pub grounded: bool,
     speed: f32,
     current_top_animation: Option<(&'static Animation, f32)>,
     pub previous_flipped: bool,
@@ -25,7 +25,7 @@ pub struct Player {
 }
 const FRICITON: f32 = 1.0;
 const GRAVITY: f32 = 900.;
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum DeathCause {
     Acid,
     Default,
@@ -143,9 +143,8 @@ impl Player {
             //     });
             //     to_check.append(&mut buffer);
             // }
-            dbg!((self.velocity));
 
-            for y in 0..(self.size.y / 16.0) as i16 + 1 {
+            for y in (0..(self.size.y / 16.0) as i16 + 1).rev() {
                 let y = ((y * 16) as f32).min(self.size.y);
                 for x in 0..((self.size.x / 16.0).ceil()) as i16 + 1 {
                     let x = ((x * 16) as f32).min(self.size.x - 1.0);
@@ -157,16 +156,15 @@ impl Player {
                     if x != 0.0 && map_pos.x.fract() == 0.0 {
                         map_pos.x -= 1.0;
                     }
-                    dbg!(map_pos);
-                    let (tile) = get_tile(map_pos, level);
-                    if let Some((tile, tile_pos)) = tile {
+                    let tile = level.get_tile(map_pos);
+                    if let Some(tile) = tile {
+                        let tile_pos = floored_pos(map_pos);
                         if tile.collision {
                             if DEBUG_FLAGS.show_collisions {
                                 dbg!(tile_pos);
                                 draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, BLUE);
                             }
 
-                            dbg!("collid y");
                             self.pos.y = self
                                 .pos
                                 .y
@@ -188,7 +186,7 @@ impl Player {
                     }
                 }
             }
-            for y in 0..(self.size.y / 16.0) as i16 + 1 {
+            for y in (0..(self.size.y / 16.0) as i16 + 1).rev() {
                 let y = ((y * 16) as f32).min(self.size.y - 1.0);
                 for x in 0..((self.size.x / 16.0).ceil()) as i16 + 1 {
                     let x = ((x * 16) as f32).min(self.size.x);
@@ -199,21 +197,29 @@ impl Player {
                     if x != 0.0 && map_pos.x.fract() == 0.0 {
                         map_pos.x -= 1.0;
                     }
-                    let (tile) = get_tile(map_pos, level);
-                    if let Some((tile, tile_pos)) = tile {
+                    let (tile) = level.get_tile(map_pos);
+
+                    if let Some((tile)) = tile {
+                        let tile_pos = floored_pos(map_pos);
+
+                        if let Some(death_cause) = tile.death_cause
+                            && self.death.is_none()
+                        {
+                            self.death = Some((death_cause, 0.0));
+                        }
                         if tile.collision {
                             if DEBUG_FLAGS.show_collisions {
                                 draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, YELLOW);
                             }
 
-                            dbg!("collid x");
                             let x1 = tile_pos.x - point.0;
                             let x2 = tile_pos.x + TILE_SIZE - point.0;
-                            if (x1 - self.pos.x).abs() < (x2 - self.pos.x).abs() {
-                                self.pos.x = x1
+                            self.pos.x = if self.velocity.x.is_sign_positive() {
+                                x1
                             } else {
-                                self.pos.x = x2;
-                            }
+                                x2
+                            };
+
                             // self.pos.x = self.pos.x.clamp(x1, x2);
                             self.velocity.x = 0.;
                         }
@@ -222,14 +228,6 @@ impl Player {
                     }
                 }
             }
-
-            // if !self.grounded {
-            //     if let Some(death_cause) = &pottential_collider.death_cause
-            //         && self.death.is_none()
-            //     {
-            //         self.death = Some((*death_cause, 0.0));
-            //     }
-            // }
             if self.grounded {
                 camera.calculate_y_up(&self);
                 if self.velocity.x.is_sign_positive() {

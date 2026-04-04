@@ -31,16 +31,38 @@ struct CameraHolder {
     desired_y: f32,
 }
 impl CameraHolder {
-    fn update(&mut self, player: &Player) {
-        //dbg!(self.pos.y, self.desired_y);
+    fn update(&mut self, player: &Player, level: &Level) {
+        let mut pos = player.pos;
+        let mut c = 0;
+        if player.grounded {
+            while c < 10
+                && let Some(tile) = level.get_tile(pos)
+                && !tile.ground
+            {
+                c += 1;
+                pos = pos
+                    + vec2(
+                        TILE_SIZE * if player.previous_flipped { -1.0 } else { 1.0 },
+                        TILE_SIZE,
+                    );
+            }
+            if let Some((tile)) = level.get_tile(pos) {
+                self.desired_y = player.pos.y + (pos.y - player.pos.y) * 0.2;
+                draw_rectangle(pos.x, pos.y, TILE_SIZE, TILE_SIZE, RED);
+            }
+        }
         const Y_SPEED: f32 = 0.5;
         const Y_BELOW_THRESHOLD: f32 = 30.0;
         if player.pos.y + SCREEN_SIZE.1 / 2.0 + Y_BELOW_THRESHOLD > self.pos.y + SCREEN_SIZE.1 {
-            self.pos.y = player.pos.y + player.velocity.y - 20.0 - SCREEN_SIZE.1 * 2.0;
+            self.pos.y = player.pos.y;
             self.desired_y = self.pos.y
         }
+        dbg!(self.pos.y, self.desired_y, player.pos);
+
         if (self.pos.y - self.desired_y).abs() > 5.0 {
-            self.pos.y += ((self.desired_y - self.pos.y).signum() * Y_SPEED).floor();
+            self.pos.y += ((self.desired_y - self.pos.y).signum() * Y_SPEED);
+
+            println!("movin");
         }
         const FORESIGHT: f32 = 7.5;
         const MAX_FORESIGHT: f32 = FORESIGHT * 3.5;
@@ -65,14 +87,7 @@ impl CameraHolder {
         //self.pos = self.pos.round();
     }
     fn calculate_y_up(&mut self, player: &Player) {
-        const THRESHOLD: f32 = 100.0;
-        self.desired_y = player.pos.y - 17.5;
-
-        if player.pos.y < self.pos.y - THRESHOLD + SCREEN_SIZE.1 / 2.0 {
-            //dbg!(player.pos.y);
-        } else {
-            //dbg!(player.pos.y + SCREEN_SIZE.1, self.pos.y - THRESHOLD);
-        }
+        // self.desired_y = player.pos.y - 17.5;
     }
 }
 
@@ -123,8 +138,8 @@ impl Game {
             include_str!("../assets/tileset.tsx"),
         );
         let mut enemies = Vec::new();
-        for enemy in special_data.enemies.iter() {
-            enemies.push(NewEnemy::from(enemy.0, enemy.1, &map))
+        for (preset, pos) in special_data.enemies.iter() {
+            enemies.push(NewEnemy::new(*preset, *pos, &map))
         }
         Self {
             boss: if let Some((boss, tile)) = special_data.boss {
@@ -241,7 +256,7 @@ impl Game {
                 frame_time,
                 &mut self.camera,
             );
-            self.camera.update(&self.player);
+            self.camera.update(&self.player, &self.map);
         }
         #[cfg(debug_assertions)]
         {

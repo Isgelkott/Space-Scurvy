@@ -2,7 +2,13 @@ use std::{collections::HashMap, f32::consts::PI, panic, sync::LazyLock};
 
 use macroquad::prelude::*;
 
-use crate::{assets::ASSETS, level::Level, player::Player, projectiles::Projectile, utils::*};
+use crate::{
+    assets::ASSETS,
+    level::{Level, SpecialTileData, TILE_SIZE},
+    player::Player,
+    projectiles::Projectile,
+    utils::*,
+};
 pub static ENEMY_IDS: LazyLock<HashMap<u16, PresetEnemies>> = LazyLock::new(|| {
     HashMap::from([
         (141, PresetEnemies::Jetpacker),
@@ -127,15 +133,6 @@ pub fn update_enemies(
         );
     }
 }
-struct Fish {
-    origin: Vec2,
-
-    size: Vec2,
-    is_attacking: bool,
-    attack_clock: f32,
-    attack_cooldown: f32,
-    direction: f32,
-}
 
 pub trait EnemyBehaviour {
     fn update(
@@ -143,6 +140,7 @@ pub trait EnemyBehaviour {
         pos: &mut Vec2,
         size: &mut Vec2,
         player: &Player,
+
         map: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
@@ -154,70 +152,67 @@ pub trait EnemyBehaviour {
 pub struct NewEnemy {
     pub pos: Vec2,
     pub size: Vec2,
+    animations: &'static AnimationGroup,
     beahavior: Box<dyn EnemyBehaviour>,
+    enemy: PresetEnemies,
+    clock: f32,
 }
 impl NewEnemy {
-    pub fn from(preset: PresetEnemies, pos: Vec2, level: &Level) -> Self {
+    pub fn new(preset: PresetEnemies, pos: Vec2, level: &Level) -> Self {
+        let animations;
         let behaviour: Box<dyn EnemyBehaviour>;
-        let size;
-        dbg!(preset);
+
         match preset {
             PresetEnemies::Jetpacker => {
-                size = ASSETS.jetpacker.get_size();
+                animations = &ASSETS.jetpacker;
                 behaviour = Box::new(Jetpacker::new(pos, level));
             }
             PresetEnemies::Fish => {
+                animations = &ASSETS.fish;
                 behaviour = Box::new(Fish::new(pos, level));
-                size = ASSETS.fish.get_size();
             }
-            PresetEnemies::BombChain => {
-                behaviour = Box::new(BombChain::new(pos, level));
-                size = Vec2::ZERO
-            }
-            PresetEnemies::FireWagon => {
-                behaviour = Box::new(FireWagon::new(pos, level));
-                size = ASSETS.fire_wagon.get_size();
-            }
-            PresetEnemies::SpikeBall => todo!(),
-            PresetEnemies::MachineGunner => todo!(),
+            _ => panic!(),
         };
+
         Self {
+            animations,
+            clock: 0.0,
             pos,
-            size,
+            size: animations.get_size(),
             beahavior: behaviour,
+            enemy: preset,
         }
     }
+    fn update(
+        &mut self,
+        size: &mut Vec2,
+        player: &Player,
+        map: &Level,
+        projectiles: &mut Vec<Projectile>,
+        frame_time: f32,
+    ) {
+        self.beahavior
+            .update(&mut self.pos, size, player, map, projectiles, frame_time);
+    }
+}
+struct Fish {
+    origin: Vec2,
+
+    is_attacking: bool,
+    attack_clock: f32,
+    attack_cooldown: f32,
+    direction: f32,
 }
 impl EnemyBehaviour for Fish {
     fn new(pos: Vec2, map: &Level) -> Self {
         {
-            // let mut start_x = to_world_pos(pos, map.width);
-            // let mut end_x = start_x;
-
-            // while map.tiles[start_x]
-            //     .special_data
-            //     .iter()
-            //     .any(|f| *f == SpecialTileData::Path)
-            // {
-            //     start_x -= 1;
-            // }
-            // while map.tiles[end_x]
-            //     .special_data
-            //     .iter()
-            //     .any(|f| *f == SpecialTileData::Path)
-            // {
-            //     end_x += 1;
-            // }
-            // Self {
-            //     origin: pos,
-            //     direction: 60.0,
-            //     attack_clock: 0.0,
-            //     attack_cooldown: 0.0,
-            //     is_attacking: false,
-
-            //     size: ASSETS.fish.get_size(),
-            // }
-            panic!()
+            Self {
+                origin: pos,
+                direction: 60.0,
+                attack_clock: 0.0,
+                attack_cooldown: 0.0,
+                is_attacking: false,
+            }
         }
     }
 
@@ -247,12 +242,11 @@ impl EnemyBehaviour for Fish {
             } else {
                 0.0
             };
-            let shader = pos.y + self.size.y > self.origin.y;
+            let shader = pos.y + size.y > self.origin.y;
             if shader {
                 FISH_MATERIAL.set_uniform(
                     "acidy",
-                    if rotation == 0.0 { -1.0 } else { 1.0 }
-                        - (self.origin.y - pos.y) / self.size.y,
+                    if rotation == 0.0 { -1.0 } else { 1.0 } - (self.origin.y - pos.y) / size.y,
                 );
                 gl_use_material(&FISH_MATERIAL);
             }
@@ -266,47 +260,32 @@ impl EnemyBehaviour for Fish {
             if shader {
                 gl_use_default_material();
             }
-            // } else {
-            //     'wa: {
-            //         let tile = to_world_pos(
-            //             vec2(
-            //                 pos.x
-            //                     + self.direction * frame_time
-            //                     + if self.direction.is_sign_positive() {
-            //                         self.size.x
-            //                     } else {
-            //                         0.0
-            //                     },
-            //                 self.origin.y,
-            //             ),
-            //             map.width,
-            //         );
+        } else {
+            if (player.pos.x - (pos.x + size.x)).abs() < 20.0 && self.attack_cooldown <= 0.0 {
+                dbg!("attacking");
+                self.is_attacking = true;
+                self.attack_cooldown = 5.0;
+            } else {
+                ASSETS.fish.get("bubbles").play(*pos, None);
 
-            //         if (player.pos.x - (pos.x + self.size.x)).abs() < 20.0
-            //             && self.attack_cooldown <= 0.0
-            //         {
-            //             dbg!("attacking");
-            //             self.is_attacking = true;
-            //             self.attack_cooldown = 5.0;
-            //         } else {
-            //             ASSETS.fish.get("bubbles").play(*pos, None);
-            //             if tile + 1 > map.tiles.len() {
-            //                 dbg!("out of bounds fish");
-            //                 break 'wa;
-            //             }
-            //             if !map.tiles[tile]
-            //                 .special_data
-            //                 .iter()
-            //                 .any(|f| *f == SpecialTileData::Acid)
-            //             {
-            //                 //dbg!("beep bepp");
-            //                 //dbg!(tile);
-            //                 //dbg!(self.origin.y);
-            //                 self.direction *= -1.0;
-            //             } else {
-            //                 pos.x += self.direction * frame_time;
-            //             }
-            //         }
+                if let Some(tile) = map.get_tile(
+                    *pos + vec2(
+                        if self.direction.is_sign_positive() {
+                            size.x
+                        } else {
+                            0.0
+                        },
+                        0.0,
+                    ),
+                ) && tile.collision
+                {
+                    //dbg!("beep bepp");
+                    //dbg!(tile);
+                    //dbg!(self.origin.y);
+                    self.direction *= -1.0;
+                }
+                pos.x += self.direction * frame_time;
+            }
         }
     }
 }
@@ -496,63 +475,43 @@ enum JetpackerState {
     Fall,
 }
 struct Jetpacker {
-    origin: Vec2,
-    attacked: bool,
+    pos: Vec2,
+    direction: Option<Vec2>,
     flipped: bool,
-    behavior_curve: [(f32, f32, &'static Animation, bool); 6],
-    state: (JetpackerState, f32),
-    fall_velocity: f32,
+    clock: f32,
+    activated: bool,
+    state: JetpackerState,
 }
-
+fn scan_for_path(pos: Vec2, level: &Level) -> Vec2 {
+    let mut direction = None;
+    for c in &level.chunks {
+        for t in &c.tiles {
+            if t.has_special(SpecialTileData::Path) {}
+        }
+    }
+    for y in -1..=1 {
+        for x in -1..=1 {
+            let pos = pos + vec2(x as f32 * TILE_SIZE, y as f32 * TILE_SIZE);
+            if let Some(tile) = level.get_tile(pos) {
+                if tile.has_special(SpecialTileData::Path) {
+                    direction = Some(vec2(x as f32, y as f32));
+                    break;
+                }
+                dbg!(pos);
+            }
+        }
+    }
+    direction.unwrap()
+}
 impl EnemyBehaviour for Jetpacker {
-    fn new(pos: Vec2, map: &Level) -> Self {
-        // let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
-        // let mut tile = (map_pos.y as usize) * map.width as usize + map_pos.x as usize;
-        // let ground_animation = if map.tiles[tile].collision {
-        //     &ASSETS.jetpacker.get("idle")
-        // } else {
-        //     &ASSETS.jetpacker.get("fly")
-        // };
-        // tile = tile - 2 * map.width as usize;
-        // for i in 0..10 {
-        //     dbg!(&map.tiles[tile + 3 - i].special_data);
-        // }
-        // let wa = to_game_pos(tile, map);
-        // dbg!(wa);
-        // draw_rectangle(wa.x, wa.y, 16.0, 16.0, WHITE);
-
-        // dbg!(tile, &map.tiles[tile].visual);
-        // let fly_height = 0.0;
-        // while map.tiles[tile]
-        //     .visual
-        //     .iter()
-        //     .any(|f| *f == VisualData::ID(240))
-        // {
-        //     panic!("path above at tile {}", tile);
-        //     tile = tile - map.width as usize;
-        //     fly_height -= TILE_SIZE * MAP_SCALE_FACTOR;
-        // }
-        // let flight_speed = -50.0;
-        // let flight_time = (fly_height / flight_speed).abs();
-
-        // dbg!(flight_time);
-        // let animation = ASSETS.jetpacker.get("fly");
-        // let curve: [(f32, f32, &Animation, bool); 6] = [
-        //     (0.0, 0.0, ground_animation, false),
-        //     (1.5, 0.0, animation, false),
-        //     (flight_time + 1.5, fly_height, animation, false),
-        //     (flight_time + 2.5 + 1.5, fly_height, animation, true),
-        //     (flight_time + 4.0 + 1.5, fly_height, animation, false),
-        //     (flight_time + 5.0 + 1.5, 0.0, animation, false),
-        // ];
+    fn new(pos: Vec2, level: &Level) -> Self {
         Self {
-            state: (JetpackerState::Normal, 0.0),
-            fall_velocity: 0.0,
-
-            behavior_curve: panic!(),
+            direction: None,
+            state: JetpackerState::Normal,
+            clock: 0.0,
+            activated: false,
             flipped: false,
-            attacked: false,
-            origin: pos,
+            pos,
         }
     }
 
@@ -561,105 +520,29 @@ impl EnemyBehaviour for Jetpacker {
         pos: &mut Vec2,
         size: &mut Vec2,
         player: &Player,
-        map: &Level,
+        level: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
     ) {
+        const SPEED: f32 = 200.0;
+        if self.direction.is_none()
+            || level
+                .get_tile(self.pos + self.direction.unwrap() * TILE_SIZE)
+                .is_none()
+        {
+            self.direction = Some(scan_for_path(*pos, level));
+        }
         if DEBUG_FLAGS.show_path {
-            draw_path(
-                self.behavior_curve
-                    .iter()
-                    .map(|f| vec2(self.origin.x, self.origin.y + f.1))
-                    .collect(),
-            );
+            // for y in ((self.origin.y) / TILE_SIZE) as i8..=(self.height + self.origin.y) as i8 {
+            //     print!("wa");
+            //     draw_rectangle(self.origin.x, y as f32 * TILE_SIZE, 8., 8., ORANGE);
+            // }
         }
-        self.state.1 += frame_time;
-        if pos.y > self.origin.y {
-            *pos = self.origin;
-            self.fall_velocity = 0.0;
-            self.state = (JetpackerState::Lie, 0.0);
-        }
-        let params = DrawTextureParams {
-            flip_x: self.flipped,
-            ..Default::default()
-        };
-        match self.state.0 {
-            JetpackerState::Fall => {
-                self.fall_velocity += 2.0;
-                ASSETS
-                    .jetpacker
-                    .get("fall")
-                    .play(*pos, Some(params.clone()));
-            }
-            JetpackerState::Getup => {
-                let animation = ASSETS.jetpacker.get("getup");
-                animation.play_with_clock(*pos, self.state.1, Some(params.clone()));
-                if self.state.1 > animation.1 as f32 / 1000.0 {
-                    self.state = (JetpackerState::Normal, 0.0)
-                }
-            }
-            JetpackerState::Hit => {
-                self.flipped = if pos.x > self.origin.x { true } else { false };
-                let animation = ASSETS.jetpacker.get("hit");
-                animation.play_with_clock(*pos, self.state.1, Some(params.clone()));
-                if self.state.1 > animation.1 as f32 / 1000.0 {
-                    self.state = (JetpackerState::Fall, 0.0)
-                }
-            }
+        match &self.state {
             JetpackerState::Normal => {
-                self.flipped = pos.x > self.origin.x;
-
-                if self.state.1 + frame_time > self.behavior_curve.last().unwrap().0 {
-                    self.state.1 = 0.0;
-                    self.attacked = false;
-                }
-                let mut last = self.behavior_curve.last().unwrap();
-                let time = self.state.1;
-                for p in self.behavior_curve.iter().rev() {
-                    if time >= p.0 {
-                        let k = (last.1 - p.1) / (last.0 - p.0);
-                        *pos = vec2(
-                            self.origin.x,
-                            self.origin.y
-                                + if !k.is_infinite() { k } else { 0.0 } * (time - p.0)
-                                + p.1,
-                        );
-                        p.2.play(
-                            *pos,
-                            Some(DrawTextureParams {
-                                flip_x: self.flipped,
-                                ..Default::default()
-                            }),
-                        );
-                        if p.3 && !self.attacked {
-                            self.attacked = true;
-                            // projectiles.push(Box::new(EnergyBall::new(
-                            //     *pos
-                            //         + if self.flipped {
-                            //             vec2(10.0, 0.0)
-                            //         } else {
-                            //             vec2(-10.0, 0.0)
-                            //         }
-                            //         + vec2(0.0, 5.0),
-                            //     ((*pos + player.size / 2.0) - (*pos + self.size / 2.0))
-                            //         .normalize_or_zero(),
-                            // )));
-                        }
-                        break;
-                    } else {
-                        last = p
-                    }
-                }
+                self.pos += self.direction.unwrap() * SPEED * frame_time;
             }
-            JetpackerState::Lie => {
-                let animation = ASSETS.jetpacker.get("fall");
-
-                animation.play(*pos + vec2(0.0, 4.0), Some(params.clone()));
-                if self.state.1 > animation.1 as f32 / 1000.0 {
-                    self.state = (JetpackerState::Getup, 0.0)
-                }
-            }
-        };
-        pos.y += self.fall_velocity * frame_time;
+            _ => panic!(),
+        }
     }
 }

@@ -62,18 +62,7 @@ pub fn create_camera(dimensions: Vec2) -> Camera2D {
         ..Default::default()
     }
 }
-pub fn get_tile(pos: Vec2, level: &Level) -> Option<(&Tile, Vec2)> {
-    let ipos = ((pos.x / TILE_SIZE) as i16, (pos.y / TILE_SIZE) as i16);
-    let chunk_x = (ipos.0 / 16) * 16;
-    let chunk_y = (ipos.1 / 16) * 16;
-    if let Some(chunk) = level.chunks.iter().find(|f| f.pos == (chunk_x, chunk_y)) {
-        let local_x = ipos.0 - chunk_x;
-        let local_y = ipos.1 - chunk_y;
-        let index = (local_x % 16 + local_y * 16) as usize;
-        return Some((&chunk.tiles[index], (pos / TILE_SIZE).floor() * TILE_SIZE));
-    }
-    return None;
-}
+
 pub struct Spritesheet {
     spritesheet: Texture2D,
     size: (f32, f32),

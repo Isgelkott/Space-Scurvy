@@ -502,7 +502,6 @@ impl Boss for RedGuy {
                         },
                     );
                 }
-                _ => todo!(),
             }
             return true;
         });
