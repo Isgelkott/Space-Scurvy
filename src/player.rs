@@ -25,7 +25,7 @@ pub struct Player {
     last_pos: Vec2,
 }
 const FRICITON: f32 = 1.0;
-const GRAVITY: f32 = 900.;
+pub const GRAVITY: f32 = 900.;
 #[derive(Clone, Copy, Debug)]
 pub enum DeathCause {
     Acid,
@@ -128,7 +128,6 @@ impl Player {
                         enemy.size - HITBOX_SHRINK_AMOUNT,
                     ),
                 );
-                dbg!(is_coliding);
                 if is_coliding {
                     if self.last_pos.y + self.size.y < enemy.pos.y {
                         self.knockback(enemy.pos + enemy.size / 2., 30.);

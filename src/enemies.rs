@@ -4,8 +4,8 @@ use macroquad::prelude::*;
 
 use crate::{
     assets::ASSETS,
-    level::{Level, SpecialTileData, TILE_SIZE},
-    player::Player,
+    level::{self, Level, SpecialTileData, TILE_SIZE, floored_pos},
+    player::{GRAVITY, Player},
     projectiles::Projectile,
     utils::*,
 };
@@ -37,7 +37,94 @@ impl PresetEnemies {
         }
     }
 }
+fn is_grounded_and_check_bounds(
+    pos: &mut Vec2,
+    size: &mut Vec2,
+    velocity: &mut Vec2,
+    frame_time: f32,
+    level: &Level,
+) -> (bool, bool) {
+    let mut grounded = false;
+    let mut collid_with_wall = false;
+    for y in (0..(size.y / 16.0) as i16 + 2).rev() {
+        let y = ((y * 16) as f32).min(size.y);
+        for x in 0..((size.x / 16.0).ceil()) as i16 + 2 {
+            let x = ((x * 16) as f32).min(size.x - 1.0);
+            let point = (x, y);
+            let mut map_pos =
+                *pos + vec2(1.0, 0.0) + vec2(0.0, velocity.y) * frame_time + vec2(point.0, point.1);
+            // if x != 0.0 && map_pos.x.fract() == 0.0 {
+            //     map_pos.x -= 1.0;
+            // }
+            let tile = level.get_tile(map_pos);
+            if let Some(tile) = tile {
+                let tile_pos = floored_pos(map_pos);
+                if tile.collision {
+                    if DEBUG_FLAGS.show_collisions {
+                        dbg!(tile_pos);
+                        draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, BLUE);
+                    }
 
+                    pos.y = pos
+                        .y
+                        .clamp(tile_pos.y - point.1, tile_pos.y + TILE_SIZE - point.1);
+                    if pos.y == (tile_pos.y - point.1) || pos.y == tile_pos.y + TILE_SIZE - point.1
+                    {
+                        grounded = true;
+
+                        velocity.y = 0.;
+                    }
+                } else {
+                    if DEBUG_FLAGS.show_collisions {
+                        draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, RED);
+                    }
+                }
+            } else {
+                dbg!("out of bounds :(");
+            }
+        }
+    }
+    for y in (0..(size.y / 16.0) as i16 + 2).rev() {
+        let y = ((y * 16) as f32).min(size.y - 1.0);
+        for x in 0..((size.x / 16.0).ceil()) as i16 + 1 {
+            let x = ((x * 16) as f32).min(size.x);
+            let point = (x, y);
+            let mut map_pos = *pos + vec2(velocity.x, 0.0) * frame_time + vec2(point.0, point.1);
+            if x != 0.0 && map_pos.x.fract() == 0.0 {
+                map_pos.x -= 1.0;
+            }
+            let tile = level.get_tile(map_pos);
+
+            if let Some(tile) = tile {
+                let tile_pos = floored_pos(map_pos);
+
+                if tile.collision {
+                    if DEBUG_FLAGS.show_collisions {
+                        draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, YELLOW);
+                    }
+
+                    let x1 = tile_pos.x - point.0;
+                    let x2 = tile_pos.x + TILE_SIZE - point.0;
+                    // pos.x = if velocity.x.is_sign_positive() {
+                    //     x1
+                    // } else {
+                    //     x2
+                    // };
+                    // velocity.x = 0.;
+
+                    collid_with_wall = true;
+                }
+            } else {
+                dbg!("out of bounds :(");
+            }
+        }
+    }
+    if grounded {
+        dbg!(grounded, collid_with_wall);
+    }
+
+    return (grounded, collid_with_wall);
+}
 fn check_player_collision(pos: Vec2, size: Vec2, player: &Player) -> bool {
     let points = [(0.0, 0.0), (size.x, 0.0), (0.0, size.y), (size.x, size.y)];
 
@@ -154,6 +241,7 @@ pub struct NewEnemy {
     pub pos: Vec2,
     pub size: Vec2,
     animations: &'static AnimationGroup,
+
     beahavior: Box<dyn EnemyBehaviour>,
     enemy: PresetEnemies,
     clock: f32,
@@ -171,6 +259,10 @@ impl NewEnemy {
             PresetEnemies::Fish => {
                 animations = &ASSETS.fish;
                 behaviour = Box::new(Fish::new(pos, level));
+            }
+            PresetEnemies::FireWagon => {
+                animations = &ASSETS.fire_wagon;
+                behaviour = Box::new(FireWagon::new(pos, level))
             }
             _ => panic!(),
         };
@@ -292,14 +384,12 @@ impl EnemyBehaviour for Fish {
 }
 
 struct FireWagon {
-    direction: Vec2,
-    speed: f32,
+    velocity: Vec2,
 }
 impl EnemyBehaviour for FireWagon {
     fn new(pos: Vec2, level: &Level) -> Self {
         Self {
-            direction: vec2(1.0, 0.0),
-            speed: 20.0,
+            velocity: vec2(20., 0.),
         }
     }
 
@@ -312,30 +402,34 @@ impl EnemyBehaviour for FireWagon {
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
     ) {
+        let (grounded, collid_with_wall) =
+            is_grounded_and_check_bounds(pos, size, &mut self.velocity, frame_time, map);
+        if grounded {
+            self.velocity.y = 0.;
+        } else {
+            self.velocity.y += GRAVITY * frame_time * 0.01;
+        }
         for i in 0..2 {
-            let i = i as f32 * 16.0;
-            // if check_collision(
-            //     *pos + vec2(i, 0.0) + self.direction * self.speed * frame_time,
-            //     map,
-            // ) {
-            //     self.direction.x *= -1.0;
-            // }
+            let i = i as f32 * TILE_SIZE;
+            if let Some(tile) = map.get_tile(*pos + vec2(i, 0.0) + self.velocity * frame_time)
+                && tile.collision
+            {
+                self.velocity.x *= -1.0;
+            }
         }
         let params = Some(DrawTextureParams {
-            flip_x: self.direction.x.is_sign_negative(),
+            flip_x: self.velocity.x.is_sign_negative(),
             ..Default::default()
         });
         let diff = (player.pos.x + player.size.x / 2.0) - (pos.x + size.x / 2.0);
-        if diff.signum() == self.direction.x.signum() && diff.abs() < 35.0 {
+        if diff.signum() == self.velocity.x.signum() && diff.abs() < 35.0 {
             let animation = ASSETS.fire_wagon.get("fire");
             animation.play(*pos, params.clone());
-            *size = animation.get_size();
         } else {
             ASSETS.fire_wagon.get("jiggle").play(*pos, params.clone());
-            *size = vec2(11.0, 15.0)
         }
         ASSETS.fire_wagon.get("drive").play(*pos, params);
-        *pos += self.direction * self.speed * frame_time;
+        *pos += self.velocity * frame_time;
     }
 }
 struct BombChain {
