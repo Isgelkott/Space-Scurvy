@@ -140,30 +140,6 @@ impl Player {
                 }
                 return true;
             });
-            // while !to_check.is_empty() {
-            //     to_check.retain_mut(|tile| {
-            //         let tile = *tile;
-            //         if !checked.contains(&tile)
-            //             && let Some(trigger) = &mut pottential_collider.trigger
-            //         {
-            //             *trigger = true;
-            //             let check = [
-            //                 tile.saturating_sub(1),
-            //                 tile + 1,
-            //                 tile.saturating_sub(map.width),
-            //                 tile + map.width,
-            //             ];
-            //             for i in check {
-            //                 buffer.push(i);
-            //             }
-            //             checked.insert(tile);
-            //             return false;
-            //         } else {
-            //             return false;
-            //         }
-            //     });
-            //     to_check.append(&mut buffer);
-            // }
 
             for y in (0..(self.size.y / 16.0) as i16 + 1).rev() {
                 let y = ((y * 16) as f32).min(self.size.y);
@@ -177,14 +153,9 @@ impl Player {
                     if x != 0.0 && map_pos.x.fract() == 0.0 {
                         map_pos.x -= 1.0;
                     }
-<<<<<<< HEAD
                     let tile = level.get_tile(map_pos);
                     if let Some(tile) = tile {
                         let tile_pos = floored_pos(map_pos);
-=======
-                    let (tile) = get_tile(map_pos, level);
-                    if let Some((tile, tile_pos)) = tile {
->>>>>>> 058dec1ce8bdca9304cadccf7329dfcbae4cf6be
                         if tile.collision {
                             if DEBUG_FLAGS.show_collisions {
                                 dbg!(tile_pos);
@@ -223,7 +194,6 @@ impl Player {
                     if x != 0.0 && map_pos.x.fract() == 0.0 {
                         map_pos.x -= 1.0;
                     }
-<<<<<<< HEAD
                     let (tile) = level.get_tile(map_pos);
 
                     if let Some((tile)) = tile {
@@ -234,11 +204,6 @@ impl Player {
                         {
                             self.death = Some((death_cause, 0.0));
                         }
-=======
-                    let (tile) = get_tile(map_pos, level);
-                
-                    if let Some((tile, tile_pos)) = tile {
->>>>>>> 058dec1ce8bdca9304cadccf7329dfcbae4cf6be
                         if tile.collision {
                             if DEBUG_FLAGS.show_collisions {
                                 draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, YELLOW);
@@ -321,12 +286,7 @@ impl Player {
 
                 bot_animation.play(self.pos, Some(params.clone()));
             }
-            // if self.velocity.x.abs() < 2. {
-            //     self.velocity.x = 0.0
-            // }
-            // if self.velocity.y.abs() < 2. {
-            //     self.velocity.y = 0.0
-            // }
+
             if !DEBUG_FLAGS.still {
                 self.last_pos = self.pos;
                 self.pos += self.velocity * frame_time;
