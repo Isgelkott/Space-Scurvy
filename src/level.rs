@@ -9,10 +9,7 @@ use crate::{
 };
 use line_ending::LineEnding;
 use macroquad::{prelude::*, rand::gen_range};
-use std::{
-    fmt::Debug,
-    panic,
-};
+use std::{fmt::Debug, panic};
 pub const TILE_SIZE: f32 = 16.0;
 // #[derive(PartialEq, Clone, Copy)]
 // pub enum SpecialLayer {
@@ -70,13 +67,12 @@ impl MapAnimation {
             pos,
         }
     }
-    pub fn update(&mut self, frame_time:f32){
-        self.clock+= frame_time;
-        if self.clock > self.animation.get_duration(){
+    pub fn update(&mut self, frame_time: f32) {
+        self.clock += frame_time;
+        if self.clock > self.animation.get_duration() {
             self.clock = 0.;
-        }   
-              self.animation.play_with_clock(self.pos, self.clock, None);
-
+        }
+        self.animation.play_with_clock(self.pos, self.clock, None);
     }
 }
 #[derive(Default, Clone)]
@@ -120,8 +116,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
         if id == 0 {
             return;
         }
-            #[allow(non_contiguous_range_endpoints)]
-
+        #[allow(non_contiguous_range_endpoints)]
         match id {
             1..20 => {
                 tile.collision = true;
@@ -129,11 +124,12 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
             }
             60..80 => {
                 let map_animation = match id {
-                    62 =>  &ASSETS.laughing_man,
-                    _=> panic!()
+                    62 => &ASSETS.laughing_man,
+                    _ => panic!(),
                 };
-                special_data.map_animations.push(MapAnimation::new(pos, map_animation.base()));
-          
+                special_data
+                    .map_animations
+                    .push(MapAnimation::new(pos, map_animation.base()));
             }
 
             81 => {
@@ -316,7 +312,6 @@ pub enum Levels {
     TestLevel,
 }
 
-
 #[derive(PartialEq)]
 enum PickupEffects {
     Win,
@@ -350,7 +345,7 @@ pub struct SpecialData {
     pub enemies: Vec<(PresetEnemies, Vec2)>,
     pub boss: Option<(Bosses, Vec2)>,
     pub pickups: Vec<Pickup>,
-    pub map_animations: Vec<MapAnimation>
+    pub map_animations: Vec<MapAnimation>,
 }
 pub struct Level {
     pub chunks: Vec<Chunk>, //pub width: usize,

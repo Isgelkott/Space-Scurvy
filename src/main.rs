@@ -31,7 +31,6 @@ struct CameraHolder {
     desired_y: f32,
 }
 impl CameraHolder {
-<<<<<<< HEAD
     fn update(&mut self, player: &Player, level: &Level) {
         let mut pos = player.pos;
         let mut c = 0;
@@ -56,14 +55,6 @@ impl CameraHolder {
         const Y_BELOW_THRESHOLD: f32 = 30.0;
         if player.pos.y + SCREEN_SIZE.1 / 2.0 + Y_BELOW_THRESHOLD > self.pos.y + SCREEN_SIZE.1 {
             self.pos.y = player.pos.y;
-=======
-    fn update(&mut self, player: &Player) {
-        const Y_SPEED: f32 = 0.5;
-        
-        if player.pos.y - SCREEN_SIZE.1 / 2.0 + player.size.y > self.pos.y  {
-            self.pos.y = player.pos.y  ;
-        
->>>>>>> 058dec1ce8bdca9304cadccf7329dfcbae4cf6be
             self.desired_y = self.pos.y
         }
 
@@ -93,12 +84,7 @@ impl CameraHolder {
         //self.pos = self.pos.round();
     }
     fn calculate_y_up(&mut self, player: &Player) {
-<<<<<<< HEAD
         // self.desired_y = player.pos.y - 17.5;
-=======
-        const CAMERA_Y_OFFSET:f32 = 17.5;
-        self.desired_y = player.pos.y - CAMERA_Y_OFFSET;
->>>>>>> 058dec1ce8bdca9304cadccf7329dfcbae4cf6be
     }
 }
 
@@ -188,7 +174,13 @@ impl Game {
             .min(screen_height() / SCREEN_SIZE.1)
             .floor();
         draw_texture_ex(
-            &self.camera_holder.camera.render_target.as_ref().unwrap().texture,
+            &self
+                .camera_holder
+                .camera
+                .render_target
+                .as_ref()
+                .unwrap()
+                .texture,
             0.0,
             0.0,
             WHITE,
@@ -250,26 +242,12 @@ impl Game {
             );
         }
         self.map.draw_level();
-<<<<<<< HEAD
-        update_map_animations(&mut self.map_animations);
+
+        // update_map_animations(&mut self.map_animations);
 
         self.projectiles.retain_mut(|projectile| {
             projectile.update(&mut self.player, frame_time, &self.map, &mut self.particles)
         });
-=======
-        for map_animation in self.map_animations.iter_mut(){
-            map_animation.update(frame_time);
-        }
-        // update_projectiles(
-        //     &mut self.player,
-        //     &self.map,
-        //     &mut self.projectiles,
-        //     &mut self.particles,
-        //     &mut self.enemies,
-        //     frame_time,
-        // );
-
->>>>>>> 058dec1ce8bdca9304cadccf7329dfcbae4cf6be
         if !self.win && !self.die {
             self.player.update(
                 &mut self.map,
@@ -279,11 +257,7 @@ impl Game {
                 frame_time,
                 &mut self.camera_holder,
             );
-<<<<<<< HEAD
-            self.camera.update(&self.player, &self.map);
-=======
-            self.camera_holder.update(&self.player);
->>>>>>> 058dec1ce8bdca9304cadccf7329dfcbae4cf6be
+            self.camera_holder.update(&self.player, &self.map);
         }
         #[cfg(debug_assertions)]
         {
