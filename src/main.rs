@@ -250,26 +250,11 @@ impl Game {
             );
         }
         self.map.draw_level();
-<<<<<<< HEAD
         update_map_animations(&mut self.map_animations);
 
         self.projectiles.retain_mut(|projectile| {
             projectile.update(&mut self.player, frame_time, &self.map, &mut self.particles)
         });
-=======
-        for map_animation in self.map_animations.iter_mut(){
-            map_animation.update(frame_time);
-        }
-        // update_projectiles(
-        //     &mut self.player,
-        //     &self.map,
-        //     &mut self.projectiles,
-        //     &mut self.particles,
-        //     &mut self.enemies,
-        //     frame_time,
-        // );
-
->>>>>>> 058dec1ce8bdca9304cadccf7329dfcbae4cf6be
         if !self.win && !self.die {
             self.player.update(
                 &mut self.map,
@@ -279,11 +264,7 @@ impl Game {
                 frame_time,
                 &mut self.camera_holder,
             );
-<<<<<<< HEAD
             self.camera.update(&self.player, &self.map);
-=======
-            self.camera_holder.update(&self.player);
->>>>>>> 058dec1ce8bdca9304cadccf7329dfcbae4cf6be
         }
         #[cfg(debug_assertions)]
         {
