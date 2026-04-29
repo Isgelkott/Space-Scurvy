@@ -142,14 +142,13 @@ pub fn load_pixel_map(animation: &Animation, color: [u8; 4]) -> Vec<(f32, Vec2)>
 pub fn load_animation_group(data: &[u8]) -> AnimationGroup {
     let file = AsepriteFile::read(data).unwrap();
     let mut map = HashMap::new();
-    for i in 0..file.num_tags() {
-        let tag = file.get_tag(i).unwrap();
-        let start = tag.from_frame();
-        let end = tag.to_frame();
+    let mut name;
+    if file.num_tags() == 0 {
+        name = "base".to_string();
 
         let mut frames = Vec::new();
         let mut duration = 0;
-        for frame in start..=end {
+        for frame in 0..file.num_frames() {
             let img = file.frame(frame);
             let time = img.duration();
             duration += time;
@@ -162,7 +161,31 @@ pub fn load_animation_group(data: &[u8]) -> AnimationGroup {
             texture.set_filter(FilterMode::Nearest);
             frames.push((texture, time));
         }
-        map.insert(tag.name().to_string(), (frames, duration));
+        map.insert(name, (frames, duration));
+    } else {
+        for i in 0..file.num_tags() {
+            let tag = file.get_tag(i).unwrap();
+            let start = tag.from_frame();
+            let end = tag.to_frame();
+
+            let mut frames = Vec::new();
+            let mut duration = 0;
+            for frame in start..=end {
+                let img = file.frame(frame);
+                let time = img.duration();
+                duration += time;
+                let img = img.image();
+                let texture = Texture2D::from_image(&Image {
+                    width: img.width() as u16,
+                    height: img.height() as u16,
+                    bytes: img.as_bytes().to_vec(),
+                });
+                texture.set_filter(FilterMode::Nearest);
+                frames.push((texture, time));
+            }
+            name = tag.name().to_string();
+            map.insert(name, (frames, duration));
+        }
     }
     AnimationGroup(map)
 }
@@ -280,6 +303,9 @@ impl AnimationGroup {
             dbg!(key);
             panic!()
         })
+    }
+    pub fn base(&self) -> &Animation {
+        self.get("base")
     }
     pub fn get_size(&self) -> Vec2 {
         self.0.values().next().unwrap().get_size()

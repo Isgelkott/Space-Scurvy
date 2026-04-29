@@ -177,9 +177,14 @@ impl Player {
                     if x != 0.0 && map_pos.x.fract() == 0.0 {
                         map_pos.x -= 1.0;
                     }
+<<<<<<< HEAD
                     let tile = level.get_tile(map_pos);
                     if let Some(tile) = tile {
                         let tile_pos = floored_pos(map_pos);
+=======
+                    let (tile) = get_tile(map_pos, level);
+                    if let Some((tile, tile_pos)) = tile {
+>>>>>>> 058dec1ce8bdca9304cadccf7329dfcbae4cf6be
                         if tile.collision {
                             if DEBUG_FLAGS.show_collisions {
                                 dbg!(tile_pos);
@@ -218,6 +223,7 @@ impl Player {
                     if x != 0.0 && map_pos.x.fract() == 0.0 {
                         map_pos.x -= 1.0;
                     }
+<<<<<<< HEAD
                     let (tile) = level.get_tile(map_pos);
 
                     if let Some((tile)) = tile {
@@ -228,6 +234,11 @@ impl Player {
                         {
                             self.death = Some((death_cause, 0.0));
                         }
+=======
+                    let (tile) = get_tile(map_pos, level);
+                
+                    if let Some((tile, tile_pos)) = tile {
+>>>>>>> 058dec1ce8bdca9304cadccf7329dfcbae4cf6be
                         if tile.collision {
                             if DEBUG_FLAGS.show_collisions {
                                 draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, YELLOW);
