@@ -22,6 +22,7 @@ pub struct Player {
     pub previous_flipped: bool,
     iframes: Option<f32>,
     pub death: Option<(DeathCause, f32)>,
+    last_pos: Vec2,
 }
 const FRICITON: f32 = 1.0;
 const GRAVITY: f32 = 900.;
@@ -33,18 +34,17 @@ pub enum DeathCause {
     Explode,
 }
 impl Player {
-    pub fn damage(&mut self, dmg: Option<u32>, death_cause: DeathCause) {
+    pub fn center(&self) -> Vec2 {
+        self.pos + self.size / 2.
+    }
+    pub fn damage(&mut self, dmg: u32, death_cause: DeathCause) {
         if self.death.is_none() {
-            if let Some(dmg) = dmg {
-                if self.iframes.is_none() {
-                    self.iframes = Some(3.0);
-                    self.hp = self.hp.saturating_sub(dmg);
-                    if self.hp == 0 {
-                        self.death = Some((death_cause, 0.0));
-                    }
+            if self.iframes.is_none() {
+                self.iframes = Some(3.0);
+                self.hp = self.hp.saturating_sub(dmg);
+                if self.hp == 0 {
+                    self.death = Some((death_cause, 0.0));
                 }
-            } else {
-                self.death = Some((death_cause, 0.0));
             }
         }
     }
@@ -61,7 +61,7 @@ impl Player {
             grounded: false,
             size: vec2(TILE_SIZE, TILE_SIZE * 2.0),
             pos,
-
+            last_pos: pos,
             velocity: Vec2::ZERO,
             speed: 150.0,
         }
@@ -119,6 +119,27 @@ impl Player {
 
             self.velocity.y += GRAVITY * frame_time;
             self.grounded = false;
+            const HITBOX_SHRINK_AMOUNT: f32 = 4.;
+            enemies.retain_mut(|enemy| {
+                let is_coliding = check_collision_rectangle_collision(
+                    (self.pos, self.size),
+                    (
+                        enemy.pos + HITBOX_SHRINK_AMOUNT,
+                        enemy.size - HITBOX_SHRINK_AMOUNT,
+                    ),
+                );
+                dbg!(is_coliding);
+                if is_coliding {
+                    if self.last_pos.y + self.size.y < enemy.pos.y {
+                        self.knockback(enemy.pos + enemy.size / 2., 30.);
+                        self.damage(15, DeathCause::Default);
+                    } else {
+                        self.velocity.y = JUMP_HEIGHT;
+                        return false;
+                    }
+                }
+                return true;
+            });
             // while !to_check.is_empty() {
             //     to_check.retain_mut(|tile| {
             //         let tile = *tile;
@@ -228,6 +249,7 @@ impl Player {
                     }
                 }
             }
+
             if self.grounded {
                 camera.calculate_y_up(&self);
                 if self.velocity.x.is_sign_positive() {
@@ -295,6 +317,7 @@ impl Player {
             //     self.velocity.y = 0.0
             // }
             if !DEBUG_FLAGS.still {
+                self.last_pos = self.pos;
                 self.pos += self.velocity * frame_time;
             }
 

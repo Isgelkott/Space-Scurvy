@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use crate::utils::*;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum DisplayType {
     Texture(Texture2D),
     Animation(Animation),

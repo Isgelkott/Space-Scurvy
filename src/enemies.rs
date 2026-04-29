@@ -57,7 +57,8 @@ fn check_map_collision(pos: Vec2, size: Vec2, map: &Level) -> bool {
         vec2(pos.x, pos.y + size.y),
         vec2(pos.x + size.x, pos.y + size.y),
     ];
-    return points.iter().any(|f| check_collision(*f, map));
+    // return points.iter().any(|f| check_collision(*f, map));
+    panic!()
 }
 fn draw_path(path: Vec<Vec2>) {
     let mut iter = path.iter();
@@ -313,12 +314,12 @@ impl EnemyBehaviour for FireWagon {
     ) {
         for i in 0..2 {
             let i = i as f32 * 16.0;
-            if check_collision(
-                *pos + vec2(i, 0.0) + self.direction * self.speed * frame_time,
-                map,
-            ) {
-                self.direction.x *= -1.0;
-            }
+            // if check_collision(
+            //     *pos + vec2(i, 0.0) + self.direction * self.speed * frame_time,
+            //     map,
+            // ) {
+            //     self.direction.x *= -1.0;
+            // }
         }
         let params = Some(DrawTextureParams {
             flip_x: self.direction.x.is_sign_negative(),
@@ -429,7 +430,7 @@ impl EnemyBehaviour for MachineGunner {
             } else {
                 self.shoot_clock += frame_time;
             }
-            ASSETS.machine_gunner.get(&"shoot").play(
+            ASSETS.machine_gunner.get("shoot").play(
                 self.pos,
                 Some(DrawTextureParams {
                     flip_x: self.flipped,
@@ -469,49 +470,37 @@ impl EnemyBehaviour for MachineGunner {
 #[derive(Debug, PartialEq)]
 enum JetpackerState {
     Normal,
-    Hit,
-    Lie,
-    Getup,
-    Fall,
+    Stall(f32),
 }
 struct Jetpacker {
-    pos: Vec2,
-    direction: Option<Vec2>,
+    fly_height: f32,
+    origin: Vec2,
+    direction: Vec2,
     flipped: bool,
     clock: f32,
-    activated: bool,
     state: JetpackerState,
+    animations: &'static AnimationGroup,
 }
-fn scan_for_path(pos: Vec2, level: &Level) -> Vec2 {
-    let mut direction = None;
-    for c in &level.chunks {
-        for t in &c.tiles {
-            if t.has_special(SpecialTileData::Path) {}
-        }
-    }
-    for y in -1..=1 {
-        for x in -1..=1 {
-            let pos = pos + vec2(x as f32 * TILE_SIZE, y as f32 * TILE_SIZE);
-            if let Some(tile) = level.get_tile(pos) {
-                if tile.has_special(SpecialTileData::Path) {
-                    direction = Some(vec2(x as f32, y as f32));
-                    break;
-                }
-                dbg!(pos);
-            }
-        }
-    }
-    direction.unwrap()
-}
+
 impl EnemyBehaviour for Jetpacker {
     fn new(pos: Vec2, level: &Level) -> Self {
+        let mut min_y = pos.y - TILE_SIZE;
+
+        while let Some(tile) = level.get_tile(vec2(pos.x, min_y))
+            && tile.has_special(SpecialTileData::Path)
+        {
+            min_y = min_y - TILE_SIZE;
+        }
+        let fly_height = pos.y - min_y;
+        dbg!(fly_height);
         Self {
-            direction: None,
+            fly_height,
+            origin: pos,
+            direction: Vec2::NEG_Y,
             state: JetpackerState::Normal,
             clock: 0.0,
-            activated: false,
             flipped: false,
-            pos,
+            animations: &ASSETS.jetpacker,
         }
     }
 
@@ -524,25 +513,52 @@ impl EnemyBehaviour for Jetpacker {
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
     ) {
-        const SPEED: f32 = 200.0;
-        if self.direction.is_none()
-            || level
-                .get_tile(self.pos + self.direction.unwrap() * TILE_SIZE)
-                .is_none()
-        {
-            self.direction = Some(scan_for_path(*pos, level));
-        }
-        if DEBUG_FLAGS.show_path {
-            // for y in ((self.origin.y) / TILE_SIZE) as i8..=(self.height + self.origin.y) as i8 {
-            //     print!("wa");
-            //     draw_rectangle(self.origin.x, y as f32 * TILE_SIZE, 8., 8., ORANGE);
-            // }
-        }
-        match &self.state {
+        const SPEED: f32 = 75.0;
+        const STALL_DURATION: f32 = 1.2;
+
+        let mut check_view_direction = || self.flipped = player.center().x > pos.x;
+        match &mut self.state {
             JetpackerState::Normal => {
-                self.pos += self.direction.unwrap() * SPEED * frame_time;
+                check_view_direction();
+                self.animations.play_tag(
+                    "fly",
+                    *pos,
+                    Some(DrawTextureParams {
+                        flip_x: self.flipped,
+                        ..Default::default()
+                    }),
+                );
+                pos.y += self.direction.y * SPEED * frame_time;
+                if pos.y > self.origin.y {
+                    self.state = JetpackerState::Stall(STALL_DURATION);
+                    return;
+                }
+                if pos.y < self.origin.y - self.fly_height {
+                    self.state = JetpackerState::Stall(STALL_DURATION);
+                    projectiles.push(Projectile::from(
+                        *pos,
+                        crate::projectiles::Projectiles::EnergyBall,
+                        (player.pos - *pos).normalize(),
+                    ));
+                }
             }
-            _ => panic!(),
+            JetpackerState::Stall(duration) => {
+                check_view_direction();
+
+                self.animations.play_tag(
+                    "fly",
+                    *pos,
+                    Some(DrawTextureParams {
+                        flip_x: self.flipped,
+                        ..Default::default()
+                    }),
+                );
+                *duration -= frame_time;
+                if duration.is_sign_negative() {
+                    self.state = JetpackerState::Normal;
+                    self.direction = vec2(0., -self.direction.y);
+                }
+            }
         }
     }
 }

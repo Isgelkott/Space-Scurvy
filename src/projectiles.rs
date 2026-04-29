@@ -1,6 +1,12 @@
 use macroquad::prelude::*;
 
-use crate::{assets::ASSETS, particles::Particles, player::DeathCause, utils::AnimationMethods};
+use crate::{
+    assets::ASSETS,
+    level::Level,
+    particles::{self, Particle, Particles},
+    player::{DeathCause, Player},
+    utils::AnimationMethods,
+};
 
 pub enum Projectiles {
     Rocket,
@@ -8,11 +14,17 @@ pub enum Projectiles {
     Bullet,
 }
 pub enum ProjectileBehaviour {
-    Static,
+    Constant,
     FollowPlayer,
     ShootAtPlayer,
     Bullet,
 }
+#[derive(Debug)]
+enum Collision {
+    Player,
+    Map,
+}
+
 pub struct Projectile {
     pub pos: Vec2,
     pub size: Vec2,
@@ -25,8 +37,57 @@ pub struct Projectile {
     pub particle: Option<Particles>,
 }
 impl Projectile {
-    pub fn from(pos: Vec2, projectile: Projectiles, direction: Option<Vec2>) -> Self {
-        let direction = direction.unwrap_or(Vec2::ZERO);
+    pub fn update(
+        &mut self,
+        player: &mut Player,
+        frame_time: f32,
+        level: &Level,
+        particles: &mut Vec<Particle>,
+    ) -> bool {
+        (self.draw)(self.pos, self.size, 0.);
+
+        match &self.behaviour {
+            ProjectileBehaviour::Constant => {
+                self.pos += self.direction * self.speed * frame_time;
+            }
+            ProjectileBehaviour::FollowPlayer => {
+                self.pos += (player.pos - self.pos).normalize() * self.speed * frame_time;
+            }
+            _ => panic!(),
+        };
+        let collision = self.check_collision(player, level);
+        if let Some(collision) = &collision {
+            particles.push(Particle::preset(Particles::EnergyBallShatter, self.pos));
+            if let Collision::Player = collision {
+                player.damage(self.damage, self.death_cause);
+            }
+        }
+        return collision.is_none();
+    }
+    fn check_collision(&self, player: &Player, level: &Level) -> Option<Collision> {
+        if ((self.pos.x > player.pos.x && self.pos.x < player.pos.x + player.size.x)
+            || (self.pos.x + self.size.x > player.pos.x)
+                && self.pos.x + self.size.x < player.pos.x + player.size.x)
+            && ((self.pos.y > player.pos.y && self.pos.y < player.pos.y + player.size.y)
+                || (self.pos.y + self.size.y > player.pos.y
+                    && self.pos.y + self.size.y < player.pos.y + player.size.y))
+        {
+            return Some(Collision::Player);
+        }
+        for i in 0..2 {
+            let x = self.pos.x + i as f32 * self.size.x;
+            for j in 0..2 {
+                let y = self.pos.y + j as f32 * self.size.y;
+                if let Some(tile) = level.get_tile(vec2(x, y))
+                    && tile.collision
+                {
+                    return Some(Collision::Map);
+                }
+            }
+        }
+        return None;
+    }
+    pub fn from(pos: Vec2, projectile: Projectiles, direction: Vec2) -> Self {
         match projectile {
             Projectiles::Rocket => Projectile {
                 particle: Some(Particles::Explosion),
@@ -57,7 +118,7 @@ impl Projectile {
                 }),
                 speed: 40.0,
                 direction,
-                behaviour: ProjectileBehaviour::FollowPlayer,
+                behaviour: ProjectileBehaviour::Constant,
                 death_cause: DeathCause::Energy,
                 particle: Some(Particles::EnergyBallShatter),
             },

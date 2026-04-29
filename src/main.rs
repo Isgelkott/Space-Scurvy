@@ -10,7 +10,7 @@ use crate::{
     assets::ASSETS,
     background::Background,
     bosses::Boss,
-    particles::{Particle, update_particle_generators, update_particles},
+    particles::{Particle, update_particles},
     projectiles::Projectile,
     utils::{AnimationMethods, HP_MATERIAL, create_camera},
 };
@@ -57,18 +57,15 @@ impl CameraHolder {
             self.pos.y = player.pos.y;
             self.desired_y = self.pos.y
         }
-        dbg!(self.pos.y, self.desired_y, player.pos);
 
         if (self.pos.y - self.desired_y).abs() > 5.0 {
-            self.pos.y += ((self.desired_y - self.pos.y).signum() * Y_SPEED);
-
-            println!("movin");
+            self.pos.y += (self.desired_y - self.pos.y).signum() * Y_SPEED;
         }
         const FORESIGHT: f32 = 7.5;
         const MAX_FORESIGHT: f32 = FORESIGHT * 3.5;
         const X_SPEED: f32 = 1.2;
 
-        let desired_x = (player.pos.x + player.velocity.x * FORESIGHT);
+        let desired_x = player.pos.x + player.velocity.x * FORESIGHT;
         if (desired_x - player.pos.x).abs() > (self.pos.x - player.pos.x).abs() {
             let speed = X_SPEED
                 * if (desired_x - player.pos.x).signum() != (self.pos.x - player.pos.x).signum() {
@@ -150,7 +147,12 @@ impl Game {
             die: false,
             win: false,
             pickups: special_data.pickups,
-            backgrounds: Background::new(Vec2::ZERO),
+            backgrounds: Background::new(vec2(
+                map.chunks.iter().map(|f| f.pos.0).max().unwrap() as f32
+                    - map.chunks.iter().map(|f| f.pos.0).min().unwrap() as f32,
+                map.chunks.iter().map(|f| f.pos.1).max().unwrap() as f32
+                    - map.chunks.iter().map(|f| f.pos.1).min().unwrap() as f32,
+            )),
             scale_factor: 1.0,
             particles: Vec::new(),
             projectiles: Vec::new(),
@@ -238,15 +240,9 @@ impl Game {
         self.map.draw_level();
         update_map_animations(&mut self.map_animations);
 
-        // update_projectiles(
-        //     &mut self.player,
-        //     &self.map,
-        //     &mut self.projectiles,
-        //     &mut self.particles,
-        //     &mut self.enemies,
-        //     frame_time,
-        // );
-
+        self.projectiles.retain_mut(|projectile| {
+            projectile.update(&mut self.player, frame_time, &self.map, &mut self.particles)
+        });
         if !self.win && !self.die {
             self.player.update(
                 &mut self.map,

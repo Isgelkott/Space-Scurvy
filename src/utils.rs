@@ -62,7 +62,12 @@ pub fn create_camera(dimensions: Vec2) -> Camera2D {
         ..Default::default()
     }
 }
-
+pub fn check_collision_rectangle_collision(obj1: (Vec2, Vec2), obj2: (Vec2, Vec2)) -> bool {
+    ((obj1.0.x > obj2.0.x && obj1.0.x < obj2.0.x + obj2.1.x)
+        || (obj1.0.x + obj1.1.x > obj2.0.x) && obj1.0.x + obj1.1.x < obj2.0.x + obj2.1.x)
+        && ((obj1.0.y > obj2.0.y && obj1.0.y < obj2.0.y + obj2.1.y)
+            || (obj1.0.y + obj1.1.y > obj2.0.y && obj1.0.y + obj1.1.y < obj2.0.y + obj2.1.y))
+}
 pub struct Spritesheet {
     spritesheet: Texture2D,
     size: (f32, f32),
@@ -180,16 +185,6 @@ pub fn load_animation(data: &[u8]) -> (Vec<(Texture2D, u32)>, u32) {
     }
     (frames, duration)
 }
-pub fn check_collision(pos: Vec2, map: &Level) -> bool {
-    // let map_pos = pos / (TILE_SIZE * MAP_SCALE_FACTOR);
-    // if map_pos.y as usize * map.width as usize + map_pos.x as usize > map.tiles.len() - 1 {
-    //     return false;
-    // }
-    // let pottential_collider =
-    //     &map.tiles[map_pos.y as usize * map.width as usize + map_pos.x as usize];
-    // pottential_collider.collision
-    panic!()
-}
 
 pub fn load_animation_by_layer(data: &[u8]) -> AnimationGroup {
     let file = AsepriteFile::read(data).unwrap();
@@ -288,6 +283,9 @@ impl AnimationGroup {
     }
     pub fn get_size(&self) -> Vec2 {
         self.0.values().next().unwrap().get_size()
+    }
+    pub fn play_tag(&self, tag: &str, pos: Vec2, params: Option<DrawTextureParams>) {
+        self.get(tag).play(pos, params);
     }
 }
 

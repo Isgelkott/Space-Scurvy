@@ -6,6 +6,7 @@ use crate::{
     assets::*,
     utils::{Animation, AnimationMethods},
 };
+#[derive(Debug)]
 struct Star {
     pos: Vec2,
     direction: Vec2,
@@ -34,6 +35,7 @@ impl Star {
         }
     }
 }
+#[derive(Debug)]
 struct BackgroundObject {
     display: &'static DisplayType,
     pos: Vec2,
@@ -229,9 +231,9 @@ impl Background {
         for chunk in &mut self.spawn_chunks {
             *chunk -= frame_time;
         }
-        self.objects.retain(|f| {
-            return f.pos.x < self.size.x || f.pos.y < self.size.y;
-        });
+        // self.objects.retain(|f| {
+        //     return f.pos.x < self.size.x || f.pos.y < self.size.y;
+        // });
         let mut checked = Vec::new();
         while self.objects.len() < self.spawn_chunks.len() {
             if checked.len() >= self.spawn_chunks.len() {
@@ -256,8 +258,10 @@ impl Background {
                 checked.push(rand);
             }
         }
-        self.stars
-            .retain(|f| f.pos.x < self.size.x || f.pos.y < self.size.y);
+        self.stars.retain(|f| {
+            return true;
+            f.pos.x < self.size.x || f.pos.y < self.size.y
+        });
         while self.stars.len() < self.star_amount as usize {
             self.stars.push(Star::new(
                 vec2(gen_range(0.0, self.size.x) - self.size.y * PI / 4.0, 0.0).floor(),

@@ -573,13 +573,13 @@ impl Boss for RedGuy {
             enemy.2 += frame_time;
             let func = -(-170. * enemy.2.powi(2) + 261.5 * enemy.2);
             let heigth = func + enemy.1.y;
-
-            let pos = vec2(enemy.1.x, heigth);
-            if check_collision(pos, map) && func.is_sign_positive() {
-                let pos = vec2(pos.x, (pos.y / 16.0).floor() * 16.0 - 16.0);
-                // enemies.push(enemy.0.spawn(pos, map));
-                return false;
-            }
+            panic!();
+            // let pos = vec2(enemy.1.x, heigth);
+            // if check_collision(pos, map) && func.is_sign_positive() {
+            //     let pos = vec2(pos.x, (pos.y / 16.0).floor() * 16.0 - 16.0);
+            //     // enemies.push(enemy.0.spawn(pos, map));
+            //     return false;
+            // }
 
             // draw_texture(enemy.0.default_texture(), pos.x, pos.y, WHITE);
             return true;
@@ -594,7 +594,7 @@ impl Boss for RedGuy {
                 projectiles.push(Projectile::from(
                     self.pos + vec2(38.0, 43.0) * 2.0,
                     crate::projectiles::Projectiles::Rocket,
-                    None,
+                    Vec2::ZERO,
                 ));
             } else {
                 animation.play_with_clock(rocket.0, rocket.1, None);

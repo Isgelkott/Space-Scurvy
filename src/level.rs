@@ -152,14 +152,12 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
 
             140..160 => {
                 // enemies
-                dbg!(id);
                 let enemy = *ENEMY_IDS.get(&id).unwrap();
                 dbg!(enemy, pos, id);
                 special_data.enemies.push((enemy, pos));
             }
             160..180 => {
                 // enemies with tiles
-
                 let enemy = *ENEMY_IDS.get(&id).unwrap();
                 dbg!(enemy, pos, id);
                 special_data.enemies.push((enemy, pos));
