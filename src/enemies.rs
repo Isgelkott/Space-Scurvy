@@ -282,6 +282,7 @@ pub trait EnemyBehaviour {
 pub struct NewEnemy {
     pub pos: Vec2,
     pub size: Vec2,
+    pub jumpable: bool,
     animations: &'static AnimationGroup,
     pub die: Option<(f32, f32)>,
     flipped: bool,
@@ -296,7 +297,7 @@ impl NewEnemy {
     pub fn new(preset: PresetEnemies, pos: Vec2, level: &Level) -> Self {
         let animations;
         let behaviour: Box<dyn EnemyBehaviour>;
-
+        let mut jumpable = true;
         match preset {
             PresetEnemies::Jetpacker => {
                 animations = &ASSETS.jetpacker;
@@ -311,6 +312,7 @@ impl NewEnemy {
                 behaviour = Box::new(FireWagon::new(pos, level))
             }
             PresetEnemies::BombChain => {
+                jumpable = false;
                 animations = &ASSETS.bomb_chain;
                 behaviour = Box::new(BombChain::new(pos, level))
             }
@@ -321,6 +323,7 @@ impl NewEnemy {
             flipped: false,
             clock: 0.0,
             pos,
+            jumpable,
             animations,
             die: None,
             size: animations.size(),

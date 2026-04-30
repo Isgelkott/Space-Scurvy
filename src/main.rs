@@ -3,6 +3,7 @@
 use std::f32::consts::{PI, TAU};
 
 use enemies::*;
+use include_dir::Dir;
 use level::*;
 use macroquad::prelude::*;
 use player::*;
@@ -26,7 +27,7 @@ mod player;
 mod projectiles;
 
 mod utils;
-const SCREEN_SIZE: (f32, f32) = (300.0, 200.0);
+const SCREEN_SIZE: (f32, f32) = (384., 216.);
 struct CameraHolder {
     camera: Camera2D,
     pos: Vec2,
@@ -137,7 +138,7 @@ impl Game {
         set_camera(&self.camera_holder.camera);
     }
 
-    fn new(level: Levels) -> Self {
+    fn new(level: usize) -> Self {
         let (map, special_data) = load_tilemap(
             include_str!("../assets/maps/testlvl.tmx"),
             include_str!("../assets/tileset.tsx"),
@@ -326,6 +327,9 @@ impl Game {
         self.projectiles.retain_mut(|projectile| {
             projectile.update(&mut self.player, frame_time, &self.map, &mut self.particles)
         });
+        for animation in self.map_animations.iter_mut() {
+            animation.update(frame_time);
+        }
         if !self.win && !self.die {
             self.player.update(
                 &mut self.map,
@@ -349,9 +353,7 @@ impl Game {
             }
         }
         self.camera_holder.camera.target = self.camera_holder.pos;
-        for animation in self.map_animations.iter_mut() {
-            animation.update(frame_time);
-        }
+
         update_pickups(self);
         update_enemies(
             &mut self.enemies,
@@ -368,19 +370,23 @@ impl Game {
     }
 }
 
+enum GameState {
+    Normal(Game),
+    MainMenu,
+}
 struct GameManger {
-    game: Game,
+    gamestate: GameState,
     level_index: usize,
-    levels: Vec<Levels>,
+    levels: Dir<'static>,
     clock: f32,
 }
 impl GameManger {
     fn new() -> Self {
-        let levels = vec![Levels::TestLevel];
+        let levels = include_dir::include_dir!("./assets/maps");
         Self {
             clock: 0.0,
-            game: Game::new(levels[0]),
-            levels: levels,
+            gamestate: GameState::MainMenu,
+            levels,
             level_index: 0,
         }
     }
@@ -409,85 +415,96 @@ impl GameManger {
             && mouse_position().1 > pos.y
             && mouse_position().1 < pos.y + size.y
         {
-            self.game = Game::new(self.levels[self.level_index]);
+            todo!("");
         }
     }
     async fn update(&mut self) {
-        set_camera(&self.game.camera_holder.camera);
-        if self.game.die {
-            self.die_screen();
-        } else {
-            let mut frame_time = get_frame_time().min(1. / 60.0);
-            if let Some(speed) = DEBUG_FLAGS.speed {
-                frame_time *= speed;
-            }
-            self.game.update(frame_time).await;
+        let mut frame_time = get_frame_time().min(1. / 60.0);
 
-            let mut black_bars: bool = false;
-
-            let transition_length = 2.0;
-            if self.game.win {
-                let pos = vec2(
-                    self.game.player.pos.x
-                        - if self.game.player.previous_flipped {
-                            (ASSETS.jetpacker.get("idle").size().x + ASSETS.win_animation.size().x)
-                                / 2.0
-                        } else {
-                            0.0
-                        },
-                    self.game.player.pos.y
-                        - (ASSETS.win_animation.size().y - ASSETS.jetpacker.get("idle").size().y),
-                );
-                self.clock += frame_time;
-                if self.clock > ASSETS.win_animation.get_duration() + transition_length {
-                    self.level_index += 1;
-                    self.game = Game::new(self.levels[self.level_index]);
-                } else if self.clock > ASSETS.win_animation.get_duration() {
-                    draw_texture_ex(
-                        &ASSETS.win_animation.0.last().unwrap().0,
-                        pos.x,
-                        pos.y,
-                        WHITE,
-                        DrawTextureParams {
-                            flip_x: self.game.player.previous_flipped,
-                            ..Default::default()
-                        },
-                    );
-                    black_bars = true;
-                } else {
-                    ASSETS.win_animation.play_with_clock(
-                        vec2(pos.x, pos.y),
-                        self.clock,
-                        Some(DrawTextureParams {
-                            flip_x: self.game.player.previous_flipped,
-                            ..Default::default()
-                        }),
-                    );
+        match &mut self.gamestate {
+            GameState::MainMenu => {
+                draw_rectangle(0.0, 0.0, 10., 10., WHITE);
+                if is_mouse_button_pressed(MouseButton::Left) {
+                    self.gamestate = GameState::Normal(Game::new(0));
                 }
             }
-            self.game.draw_camera();
-            self.game.draw_ammo(frame_time);
-            if black_bars {
-                draw_rectangle(
-                    0.0,
-                    0.0,
-                    screen_width(),
-                    (self.clock - ASSETS.win_animation.get_duration()) / transition_length
-                        * screen_height()
-                        / 2.0,
-                    BLACK,
-                );
-                draw_rectangle(
-                    0.0,
-                    screen_height(),
-                    screen_width(),
-                    -(self.clock - ASSETS.win_animation.get_duration()) / transition_length
-                        * screen_height()
-                        / 2.0,
-                    BLACK,
-                );
+            GameState::Normal(game) => {
+                if game.win {
+                    let mut black_bars: bool = false;
+
+                    let transition_length = 2.0;
+
+                    let pos = vec2(
+                        game.player.pos.x
+                            - if game.player.previous_flipped {
+                                (ASSETS.jetpacker.get("idle").size().x
+                                    + ASSETS.win_animation.size().x)
+                                    / 2.0
+                            } else {
+                                0.0
+                            },
+                        game.player.pos.y
+                            - (ASSETS.win_animation.size().y
+                                - ASSETS.jetpacker.get("idle").size().y),
+                    );
+                    self.clock += frame_time;
+                    if self.clock > ASSETS.win_animation.get_duration() + transition_length {
+                        self.level_index += 1;
+                    } else if self.clock > ASSETS.win_animation.get_duration() {
+                        draw_texture_ex(
+                            &ASSETS.win_animation.0.last().unwrap().0,
+                            pos.x,
+                            pos.y,
+                            WHITE,
+                            DrawTextureParams {
+                                flip_x: game.player.previous_flipped,
+                                ..Default::default()
+                            },
+                        );
+                        black_bars = true;
+                    } else {
+                        ASSETS.win_animation.play_with_clock(
+                            vec2(pos.x, pos.y),
+                            self.clock,
+                            Some(DrawTextureParams {
+                                flip_x: game.player.previous_flipped,
+                                ..Default::default()
+                            }),
+                        );
+                    }
+                    if black_bars {
+                        draw_rectangle(
+                            0.0,
+                            0.0,
+                            screen_width(),
+                            (self.clock - ASSETS.win_animation.get_duration()) / transition_length
+                                * screen_height()
+                                / 2.0,
+                            BLACK,
+                        );
+                        draw_rectangle(
+                            0.0,
+                            screen_height(),
+                            screen_width(),
+                            -(self.clock - ASSETS.win_animation.get_duration()) / transition_length
+                                * screen_height()
+                                / 2.0,
+                            BLACK,
+                        );
+                    }
+                }
+
+                game.draw_camera();
+                game.draw_ammo(frame_time);
+
+                game.draw_hud(frame_time);
+                set_camera(&game.camera_holder.camera);
+
+                if let Some(speed) = DEBUG_FLAGS.speed {
+                    frame_time *= speed;
+                }
+                game.update(frame_time).await;
             }
-            self.game.draw_hud(frame_time);
         }
     }
 }

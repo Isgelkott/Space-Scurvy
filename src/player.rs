@@ -164,7 +164,7 @@ impl Player {
                     ),
                 );
                 if is_coliding {
-                    if self.last_pos.y + self.size.y < enemy.pos.y + 4. {
+                    if enemy.jumpable && self.last_pos.y + self.size.y < enemy.pos.y + 4. {
                         self.velocity.y = JUMP_HEIGHT;
                         enemy.kill();
                         return false;
