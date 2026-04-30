@@ -349,7 +349,9 @@ impl Game {
             }
         }
         self.camera_holder.camera.target = self.camera_holder.pos;
-
+        for animation in self.map_animations.iter_mut() {
+            animation.update(frame_time);
+        }
         update_pickups(self);
         update_enemies(
             &mut self.enemies,

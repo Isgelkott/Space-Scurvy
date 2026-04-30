@@ -5,7 +5,7 @@ use crate::{
     enemies::{ENEMY_IDS, PresetEnemies, check_collision_with_size},
     particles::ParticleGenerator,
     player::DeathCause,
-    utils::{Animation, AnimationMethods},
+    utils::{Animation, AnimationGroup, AnimationMethods},
 };
 use line_ending::LineEnding;
 use macroquad::{prelude::*, rand::gen_range};
@@ -56,23 +56,31 @@ pub enum TriggerBehaviour {
 }
 pub struct MapAnimation {
     clock: f32,
-    animation: &'static Animation,
+    animations: &'static AnimationGroup,
     pos: Vec2,
 }
 impl MapAnimation {
-    pub fn new(pos: Vec2, animation: &'static Animation) -> Self {
+    pub fn new(pos: Vec2, animations: &'static AnimationGroup) -> Self {
         Self {
-            clock: gen_range(0., animation.get_duration()),
-            animation,
+            clock: -0.,
+            animations,
             pos,
         }
     }
     pub fn update(&mut self, frame_time: f32) {
         self.clock += frame_time;
-        if self.clock > self.animation.get_duration() {
-            self.clock = 0.;
+        if self.clock > 20. {
+            self.clock = 0.
         }
-        self.animation.play_with_clock(self.pos, self.clock, None);
+        let turn_off = self.animations.get("turn_off");
+        let turn_off_time = turn_off.get_duration();
+        if self.clock < turn_off_time {
+            turn_off.play_with_clock(self.pos, turn_off_time, None);
+        } else if self.clock > 10. {
+            self.animations.get("inactive").play(self.pos, None);
+        } else {
+            self.animations.get("active").play(self.pos, None);
+        }
     }
 }
 #[derive(Default, Clone)]
@@ -95,7 +103,7 @@ impl Tile {
         let trigger_behaviour = self.trigger_behaviour.as_ref().unwrap();
         match trigger_behaviour {
             TriggerBehaviour::PlayAnimationOnce(animation) => {
-                map_animations.push(MapAnimation::new(pos, animation));
+                // map_animations.push(MapAnimation::new(pos, animation));
             }
         }
     }
@@ -129,7 +137,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
                 };
                 special_data
                     .map_animations
-                    .push(MapAnimation::new(pos, map_animation.base()));
+                    .push(MapAnimation::new(pos, map_animation));
             }
 
             81 => {
