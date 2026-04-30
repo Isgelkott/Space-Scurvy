@@ -111,6 +111,7 @@ pub struct Game {
     map_animations: Vec<MapAnimation>,
     bullets: Vec<Bullet>,
     gun_animation: f32,
+    ammo_hud_camera: Camera2D,
 }
 impl Game {
     fn draw_hud(&mut self, frame_time: f32) {
@@ -138,16 +139,23 @@ impl Game {
         set_camera(&self.camera_holder.camera);
     }
 
-    fn new(level: usize) -> Self {
-        let (map, special_data) = load_tilemap(
-            include_str!("../assets/maps/testlvl.tmx"),
-            include_str!("../assets/tileset.tsx"),
-        );
+    fn new(level_data: (Level, SpecialData)) -> Self {
+        println!("wa");
+
+        let (map, special_data) = level_data;
         let mut enemies = Vec::new();
         for (preset, pos) in special_data.enemies.iter() {
             enemies.push(NewEnemy::new(*preset, *pos, &map))
         }
-        Self {
+
+        let render_target = render_target(64, 64);
+        render_target.texture.set_filter(FilterMode::Nearest);
+
+        let mut render_target_cam = Camera2D::from_display_rect(Rect::new(0., 0., 64., 64.));
+        render_target_cam.render_target = Some(render_target);
+
+        let wahoo = Self {
+            ammo_hud_camera: render_target_cam,
             gun_animation: -0.0,
             bullets: Vec::new(),
             boss: if let Some((boss, tile)) = special_data.boss {
@@ -178,15 +186,13 @@ impl Game {
                 camera: create_camera(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1)),
                 pos: special_data.spawn_location,
             },
-        }
+        };
+        return wahoo;
     }
     fn draw_camera(&mut self) {
         set_default_camera();
         clear_background(BLACK);
 
-        self.scale_factor = (screen_width() / SCREEN_SIZE.0)
-            .min(screen_height() / SCREEN_SIZE.1)
-            .floor();
         draw_texture_ex(
             &self
                 .camera_holder
@@ -243,12 +249,8 @@ impl Game {
     }
     fn draw_ammo(&mut self, frame_time: f32) {
         self.gun_animation -= frame_time;
-        let render_target = render_target(64, 64);
-        render_target.texture.set_filter(FilterMode::Nearest);
 
-        let mut render_target_cam = Camera2D::from_display_rect(Rect::new(0., 0., 64., 64.));
-        render_target_cam.render_target = Some(render_target.clone());
-        set_camera(&render_target_cam);
+        set_camera(&self.ammo_hud_camera);
         let texture = &ASSETS.gun_inside;
 
         draw_texture(texture, 0., 0., WHITE);
@@ -288,7 +290,7 @@ impl Game {
                 );
         }
         draw_texture_ex(
-            &render_target_cam.render_target.unwrap().texture,
+            &self.ammo_hud_camera.render_target.as_ref().unwrap().texture,
             0.,
             screen_height() - ASSETS.gun_inside.height() * self.scale_factor,
             WHITE,
@@ -377,13 +379,31 @@ enum GameState {
 struct GameManger {
     gamestate: GameState,
     level_index: usize,
-    levels: Dir<'static>,
+    levels: Vec<(Level, SpecialData)>,
     clock: f32,
+    new_game: bool,
+    next_level: bool,
 }
 impl GameManger {
+    fn new_game(&mut self) {
+        dbg!(self.level_index, self.levels.len());
+        self.gamestate = GameState::Normal(Game::new(self.levels[self.level_index].clone()));
+        dbg!("WAAAAAAAAAAAAAA");
+    }
     fn new() -> Self {
-        let levels = include_dir::include_dir!("./assets/maps");
+        let levels_dir = include_dir::include_dir!("./assets/maps");
+        let mut levels = Vec::new();
+        for level in levels_dir.entries().iter() {
+            let contents = level.as_file().unwrap().contents_utf8().unwrap();
+            dbg!(level.path());
+            levels.push(load_tilemap(
+                contents,
+                include_str!("../assets/tileset.tsx"),
+            ));
+        }
         Self {
+            new_game: false,
+            next_level: false,
             clock: 0.0,
             gamestate: GameState::MainMenu,
             levels,
@@ -421,14 +441,62 @@ impl GameManger {
     async fn update(&mut self) {
         let mut frame_time = get_frame_time().min(1. / 60.0);
 
+        if self.next_level {
+            self.level_index += 1;
+            if self.level_index <= self.levels.len() - 1 {
+                self.new_game();
+                self.new_game = false;
+                self.next_level = false;
+            } else {
+                todo!("win fr")
+            }
+        } else if self.new_game {
+            self.new_game();
+            self.new_game = false;
+            self.next_level = false;
+        }
         match &mut self.gamestate {
             GameState::MainMenu => {
-                draw_rectangle(0.0, 0.0, 10., 10., WHITE);
+                let scale_factor = (screen_width() / ASSETS.main_menu.width())
+                    .min(screen_height() / ASSETS.main_menu.height());
+                ASSETS.main_menu.draw(
+                    Vec2::ZERO,
+                    Some(DrawTextureParams {
+                        dest_size: Some(ASSETS.main_menu.size() * scale_factor),
+                        ..Default::default()
+                    }),
+                );
+
+                let buttons = [
+                    (vec2(1750., 700.), vec2(2385., 900.)),
+                    (vec2(1750., 1130.), vec2(2385., 1410.)),
+                ];
                 if is_mouse_button_pressed(MouseButton::Left) {
-                    self.gamestate = GameState::Normal(Game::new(0));
+                    dbg!(mouse_pos() / scale_factor);
+                    for (index, (top_corner, lower_corner)) in buttons.iter().enumerate() {
+                        let pressed_button = check_collision_rectangle_collision(
+                            (
+                                vec2(mouse_position().0, mouse_position().1) / scale_factor,
+                                Vec2::ZERO,
+                            ),
+                            (*top_corner, *lower_corner - *top_corner),
+                        );
+                        dbg!(*top_corner * scale_factor);
+                        if pressed_button {
+                            if index == 0 {
+                                self.new_game = true;
+                            } else {
+                                panic!()
+                            }
+                        }
+                    }
                 }
             }
             GameState::Normal(game) => {
+                let scale_factor = (screen_width() / SCREEN_SIZE.0)
+                    .min(screen_height() / SCREEN_SIZE.1)
+                    .floor();
+                game.scale_factor = scale_factor;
                 if game.win {
                     let mut black_bars: bool = false;
 
@@ -449,7 +517,7 @@ impl GameManger {
                     );
                     self.clock += frame_time;
                     if self.clock > ASSETS.win_animation.get_duration() + transition_length {
-                        self.level_index += 1;
+                        self.next_level = true;
                     } else if self.clock > ASSETS.win_animation.get_duration() {
                         draw_texture_ex(
                             &ASSETS.win_animation.0.last().unwrap().0,
@@ -514,6 +582,8 @@ async fn main() {
     rand::srand((get_time() * 1000.0) as u64);
     loop {
         game.update().await;
+        dbg!("da");
         next_frame().await;
+        dbg!("ga");
     }
 }

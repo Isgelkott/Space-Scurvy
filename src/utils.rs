@@ -304,6 +304,10 @@ impl AnimationMethods for Animation {
         );
     }
 }
+pub fn mouse_pos() -> Vec2 {
+    let mouse_pos = mouse_position();
+    return vec2(mouse_pos.0, mouse_pos.1);
+}
 #[derive(Debug)]
 pub struct AnimationGroup(pub HashMap<String, Animation>);
 impl AnimationGroup {

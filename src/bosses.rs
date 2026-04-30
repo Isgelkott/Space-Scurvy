@@ -24,6 +24,7 @@ fn find_special_tile_data(level: &Level, data: SpecialTileData) -> Vec2 {
     //     level,
     // )
 }
+#[derive(Clone)]
 pub enum Bosses {
     RedGuy,
 }

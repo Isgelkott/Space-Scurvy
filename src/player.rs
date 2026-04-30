@@ -213,8 +213,6 @@ impl Player {
                                 draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, RED);
                             }
                         }
-                    } else {
-                        dbg!("out of bounds :(");
                     }
                 }
             }

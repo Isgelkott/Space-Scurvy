@@ -43,6 +43,7 @@ pub struct Assets {
     pub gun_inside: Texture2D,
     pub bullet_in_gun: Texture2D,
     pub bullet: AnimationGroup,
+    pub main_menu: Texture2D,
 }
 
 impl Assets {
@@ -130,6 +131,10 @@ impl Assets {
                 None,
             ),
             bullet: load_animation_group(include_bytes!("../assets/bullet.aseprite")),
+            main_menu: Texture2D::from_file_with_format(
+                include_bytes!("../assets/main_menu.png"),
+                None,
+            ),
         }
     }
 }

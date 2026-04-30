@@ -54,6 +54,7 @@ pub enum SpecialTileData {
 pub enum TriggerBehaviour {
     PlayAnimationOnce(&'static Animation),
 }
+#[derive(Clone)]
 pub struct MapAnimation {
     clock: f32,
     animations: &'static AnimationGroup,
@@ -108,6 +109,7 @@ impl Tile {
         }
     }
 }
+#[derive(Clone)]
 pub struct Chunk {
     pub pos: (i16, i16),
     pub tiles: Vec<Tile>,
@@ -322,11 +324,12 @@ pub enum Levels {
     TestLevel,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum PickupEffects {
     Win,
     Heal,
 }
+#[derive(Clone)]
 pub struct Pickup {
     origin: Vec2,
     size: Vec2,
@@ -349,7 +352,7 @@ pub fn update_pickups(game: &mut Game) {
         return true;
     });
 }
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct SpecialData {
     pub spawn_location: Vec2,
     pub enemies: Vec<(PresetEnemies, Vec2)>,
@@ -357,6 +360,7 @@ pub struct SpecialData {
     pub pickups: Vec<Pickup>,
     pub map_animations: Vec<MapAnimation>,
 }
+#[derive(Clone)]
 pub struct Level {
     pub chunks: Vec<Chunk>, //pub width: usize,
     //pub world_size: Vec2,
