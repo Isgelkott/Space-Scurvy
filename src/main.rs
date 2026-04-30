@@ -56,7 +56,6 @@ impl CameraHolder {
             }
             if let Some((tile)) = level.get_tile(pos) {
                 self.desired_y = player.pos.y + (pos.y - player.pos.y) * 0.2;
-                draw_rectangle(pos.x, pos.y, TILE_SIZE, TILE_SIZE, RED);
             }
         }
         const Y_SPEED: f32 = 0.5;
