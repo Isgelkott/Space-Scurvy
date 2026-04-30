@@ -51,6 +51,8 @@ pub struct Player {
     pub death: Option<(DeathCause, f32)>,
     last_pos: Vec2,
     pub ammo: u8,
+    pub has_jetpack: bool,
+    is_flying: bool,
 }
 const FRICITON: f32 = 1.0;
 pub const GRAVITY: f32 = 900.;
@@ -82,6 +84,8 @@ impl Player {
     }
     pub fn new(pos: Vec2) -> Self {
         Self {
+            has_jetpack: false,
+            is_flying: false,
             ammo: 6,
             death: None,
             iframes: None,
@@ -109,7 +113,15 @@ impl Player {
         gun_animation: &mut f32,
     ) {
         const JUMP_HEIGHT: f32 = -320.0;
-
+        const JETPACK_FORCE: f32 = 2000.;
+        if self.has_jetpack {
+            if is_key_down(KeyCode::Space) {
+                self.velocity.y -= JETPACK_FORCE * frame_time;
+                println!("flyna");
+            } else {
+                self.is_flying = false;
+            }
+        }
         if let Some(death) = &mut self.death {
             death.1 += frame_time;
         } else {
@@ -266,6 +278,10 @@ impl Player {
                 } else {
                     self.velocity.x = (self.velocity.x + FRICITON).min(0.0);
                 };
+            } else {
+                if self.has_jetpack && is_key_pressed(KeyCode::Space) {
+                    self.is_flying = true;
+                }
             }
             let shader = self.iframes.is_some() && (get_time() * 8.0).sin().is_sign_negative();
 
@@ -283,35 +299,53 @@ impl Player {
             }
 
             let jump_anim = ASSETS.player.get("jump");
-
-            if !self.grounded {
-                if self.velocity.y < JUMP_HEIGHT * 0.5 {
-                    jump_anim.draw_index(self.pos, 0, Some(params.clone()));
-                } else if self.velocity.y > 60.0 {
-                    jump_anim.draw_index(self.pos, 2, Some(params.clone()));
-                } else {
-                    jump_anim.draw_index(self.pos, 1, Some(params.clone()));
-                }
+            if self.is_flying {
+                ASSETS.player.get("fly").play(
+                    self.pos,
+                    Some(DrawTextureParams {
+                        flip_x: self.previous_flipped,
+                        ..Default::default()
+                    }),
+                );
             } else {
-                if let Some((current_top_animation, animation_clock)) =
-                    &mut self.current_top_animation
-                {
-                    if current_top_animation.1 as f32 / 1000.0 < *animation_clock {
-                        self.current_top_animation = None;
-                        top_animation.play(self.pos, Some(params.clone()));
+                if !self.grounded {
+                    if self.velocity.y < JUMP_HEIGHT * 0.5 {
+                        jump_anim.draw_index(self.pos, 0, Some(params.clone()));
+                    } else if self.velocity.y > 60.0 {
+                        jump_anim.draw_index(self.pos, 2, Some(params.clone()));
                     } else {
-                        current_top_animation.play_with_clock(
-                            self.pos,
-                            *animation_clock,
-                            Some(params.clone()),
-                        );
-                        *animation_clock += frame_time;
+                        jump_anim.draw_index(self.pos, 1, Some(params.clone()));
                     }
                 } else {
-                    top_animation.play(self.pos, Some(params.clone()));
-                };
+                    if let Some((current_top_animation, animation_clock)) =
+                        &mut self.current_top_animation
+                    {
+                        if current_top_animation.1 as f32 / 1000.0 < *animation_clock {
+                            self.current_top_animation = None;
+                            top_animation.play(self.pos, Some(params.clone()));
+                        } else {
+                            current_top_animation.play_with_clock(
+                                self.pos,
+                                *animation_clock,
+                                Some(params.clone()),
+                            );
+                            *animation_clock += frame_time;
+                        }
+                    } else {
+                        top_animation.play(self.pos, Some(params.clone()));
+                    };
 
-                bot_animation.play(self.pos, Some(params.clone()));
+                    bot_animation.play(self.pos, Some(params.clone()));
+                }
+                if self.has_jetpack {
+                    ASSETS.player.get("jetpack").play(
+                        self.pos,
+                        Some(DrawTextureParams {
+                            flip_x: self.previous_flipped,
+                            ..Default::default()
+                        }),
+                    );
+                }
             }
 
             if !DEBUG_FLAGS.still {

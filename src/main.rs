@@ -28,6 +28,7 @@ mod projectiles;
 
 mod utils;
 const SCREEN_SIZE: (f32, f32) = (384., 216.);
+const START_LIVES: u8 = 3;
 struct CameraHolder {
     camera: Camera2D,
     pos: Vec2,
@@ -112,6 +113,8 @@ pub struct Game {
     bullets: Vec<Bullet>,
     gun_animation: f32,
     ammo_hud_camera: Camera2D,
+    paused: Option<f32>,
+    pause_cam: Camera2D,
 }
 impl Game {
     fn draw_hud(&mut self, frame_time: f32) {
@@ -155,6 +158,8 @@ impl Game {
         render_target_cam.render_target = Some(render_target);
 
         let wahoo = Self {
+            pause_cam: create_camera(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1)),
+            paused: None,
             ammo_hud_camera: render_target_cam,
             gun_animation: -0.0,
             bullets: Vec::new(),
@@ -189,7 +194,7 @@ impl Game {
         };
         return wahoo;
     }
-    fn draw_camera(&mut self) {
+    fn draw_camera(&self) {
         set_default_camera();
         clear_background(BLACK);
 
@@ -301,7 +306,68 @@ impl Game {
             },
         );
     }
-    async fn update(&mut self, frame_time: f32) {
+    fn pause(&mut self) {
+        self.paused = Some(0.);
+    }
+    fn update(&mut self, frame_time: f32, level_index: usize) {
+        if is_key_pressed(KeyCode::A) {
+            self.pause()
+        }
+        if self.paused.is_some() {
+            gl_use_material(&GRAYSCALE_MAT);
+            self.draw_camera();
+            gl_use_default_material();
+        }
+        if let Some(pause_time) = &mut self.paused {
+            set_camera(&self.pause_cam);
+            clear_background(WHITE.with_alpha(0.));
+            *pause_time += frame_time;
+            let mut x_distance = 1. / *pause_time;
+            if x_distance.abs() < 1. {
+                x_distance = 0.;
+            }
+            ASSETS.left_pause.base().play(vec2(-x_distance, 0.), None);
+            ASSETS
+                .right_pause
+                .base()
+                .play(vec2(SCREEN_SIZE.0 / 2. + x_distance, 0.), None);
+            set_default_camera();
+            draw_texture_ex(
+                &self.pause_cam.render_target.as_ref().unwrap().texture,
+                0.,
+                0.,
+                WHITE,
+                DrawTextureParams {
+                    dest_size: Some(vec2(SCREEN_SIZE.0, SCREEN_SIZE.1) * self.scale_factor),
+                    ..Default::default()
+                },
+            );
+            draw_texture_ex(
+                &self.ammo_hud_camera.render_target.as_ref().unwrap().texture,
+                (97. + SCREEN_SIZE.0 / 2. + x_distance) * self.scale_factor,
+                147. * self.scale_factor,
+                WHITE,
+                DrawTextureParams {
+                    dest_size: Some(vec2(97., 70.) * self.scale_factor),
+                    ..Default::default()
+                },
+            );
+            ASSETS.lives.base().play(
+                vec2(126. + SCREEN_SIZE.0 / 2., 4. + x_distance) * self.scale_factor,
+                Some(DrawTextureParams {
+                    dest_size: Some(ASSETS.lives.size() * self.scale_factor),
+                    ..Default::default()
+                }),
+            );
+            draw_text(
+                &format!("Space Scurvy - {}", level_index),
+                0.,
+                22. * self.scale_factor,
+                22. * self.scale_factor,
+                WHITE,
+            );
+            return;
+        }
         clear_background(BLACK);
         self.backgrounds.update(frame_time);
         if let Some(boss) = &mut self.boss {
@@ -371,25 +437,11 @@ impl Game {
         self.death();
     }
 }
-
-enum GameState {
-    Normal(Game),
-    MainMenu,
-}
-struct GameManger {
-    gamestate: GameState,
-    level_index: usize,
+struct GameManagerManager {
     levels: Vec<(Level, SpecialData)>,
-    clock: f32,
-    new_game: bool,
-    next_level: bool,
+    game_manager: GameManger,
 }
-impl GameManger {
-    fn new_game(&mut self) {
-        dbg!(self.level_index, self.levels.len());
-        self.gamestate = GameState::Normal(Game::new(self.levels[self.level_index].clone()));
-        dbg!("WAAAAAAAAAAAAAA");
-    }
+impl GameManagerManager {
     fn new() -> Self {
         let levels_dir = include_dir::include_dir!("./assets/maps");
         let mut levels = Vec::new();
@@ -401,12 +453,40 @@ impl GameManger {
                 include_str!("../assets/tileset.tsx"),
             ));
         }
+        GameManagerManager {
+            levels,
+            game_manager: GameManger::new(),
+        }
+    }
+    fn update(&mut self) {
+        self.game_manager.update(&self.levels);
+    }
+}
+enum GameState {
+    Normal(Game),
+    MainMenu,
+}
+struct GameManger {
+    gamestate: GameState,
+    level_index: usize,
+    clock: f32,
+    new_game: bool,
+    next_level: bool,
+    lives: u8,
+}
+impl GameManger {
+    fn new_game(&mut self, levels: &Vec<(Level, SpecialData)>) {
+        dbg!(self.level_index, levels.len());
+        self.gamestate = GameState::Normal(Game::new(levels[self.level_index].clone()));
+        dbg!("WAAAAAAAAAAAAAA");
+    }
+    fn new() -> Self {
         Self {
             new_game: false,
             next_level: false,
             clock: 0.0,
             gamestate: GameState::MainMenu,
-            levels,
+            lives: START_LIVES,
             level_index: 0,
         }
     }
@@ -438,20 +518,20 @@ impl GameManger {
             todo!("");
         }
     }
-    async fn update(&mut self) {
+    fn update(&mut self, levels: &Vec<(Level, SpecialData)>) {
         let mut frame_time = get_frame_time().min(1. / 60.0);
 
         if self.next_level {
             self.level_index += 1;
-            if self.level_index <= self.levels.len() - 1 {
-                self.new_game();
+            if self.level_index <= levels.len() - 1 {
+                self.new_game(levels);
                 self.new_game = false;
                 self.next_level = false;
             } else {
                 todo!("win fr")
             }
         } else if self.new_game {
-            self.new_game();
+            self.new_game(levels);
             self.new_game = false;
             self.next_level = false;
         }
@@ -571,19 +651,17 @@ impl GameManger {
                 if let Some(speed) = DEBUG_FLAGS.speed {
                     frame_time *= speed;
                 }
-                game.update(frame_time).await;
+                game.update(frame_time, self.level_index);
             }
         }
     }
 }
 #[macroquad::main("krusbar")]
 async fn main() {
-    let mut game = GameManger::new();
+    let mut game = GameManagerManager::new();
     rand::srand((get_time() * 1000.0) as u64);
     loop {
-        game.update().await;
-        dbg!("da");
+        game.update();
         next_frame().await;
-        dbg!("ga");
     }
 }

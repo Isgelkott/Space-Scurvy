@@ -141,22 +141,24 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
                     .map_animations
                     .push(MapAnimation::new(pos, map_animation));
             }
+            80..100 => match id {
+                81 => {
+                    tile.particle_generator = Some(ParticleGenerator::new(
+                        pos,
+                        crate::particles::ParticleType::Acid,
+                    ));
+                    tile.death_cause = Some(DeathCause::Acid);
+                    tile.visual
+                        .push(VisualData::Animation(&ASSETS.acid.get("surface")));
+                }
+                82 => {
+                    tile.death_cause = Some(DeathCause::Acid);
 
-            81 => {
-                tile.particle_generator = Some(ParticleGenerator::new(
-                    pos,
-                    crate::particles::ParticleType::Acid,
-                ));
-                tile.death_cause = Some(DeathCause::Acid);
-                tile.visual
-                    .push(VisualData::Animation(&ASSETS.acid.get("surface")));
-            }
-            82 => {
-                tile.death_cause = Some(DeathCause::Acid);
-
-                tile.visual
-                    .push(VisualData::Animation(&ASSETS.acid.get("inside")));
-            }
+                    tile.visual
+                        .push(VisualData::Animation(&ASSETS.acid.get("inside")));
+                }
+                _ => tile.death_cause = Some(DeathCause::Default),
+            },
 
             140..160 => {
                 // enemies
@@ -186,8 +188,12 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
                     341 => Pickup {
                         pickup_effect: PickupEffects::Win,
                         origin: pos,
-                        size: ASSETS.lemon_pickup.size(),
                         animation: &ASSETS.lemon_pickup,
+                    },
+                    342 => Pickup {
+                        pickup_effect: PickupEffects::Jetpack,
+                        origin: pos,
+                        animation: &ASSETS.jetpack,
                     },
                     _ => panic!(),
                 };
@@ -327,13 +333,12 @@ pub enum Levels {
 #[derive(PartialEq, Clone)]
 enum PickupEffects {
     Win,
-    Heal,
+    Jetpack,
 }
 #[derive(Clone)]
 pub struct Pickup {
     origin: Vec2,
-    size: Vec2,
-    animation: &'static Animation,
+    animation: &'static AnimationGroup,
     pickup_effect: PickupEffects,
 }
 pub fn update_pickups(game: &mut Game) {
@@ -342,10 +347,18 @@ pub fn update_pickups(game: &mut Game) {
             pickup.origin.x,
             pickup.origin.y + (get_time() * 5.0).sin() as f32 * 5.0,
         );
-        pickup.animation.play(pos, None);
-        if check_collision_with_size((pos, pickup.size), (game.player.pos, game.player.size)) {
-            if pickup.pickup_effect == PickupEffects::Win {
-                game.win = true;
+        pickup.animation.base().play(pos, None);
+        if check_collision_with_size(
+            (pos, pickup.animation.size()),
+            (game.player.pos, game.player.size),
+        ) {
+            match pickup.pickup_effect {
+                PickupEffects::Jetpack => {
+                    game.player.has_jetpack = true;
+                }
+                PickupEffects::Win => {
+                    game.win = true;
+                }
             }
             return false;
         }

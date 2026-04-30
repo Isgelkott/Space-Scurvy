@@ -29,7 +29,7 @@ pub struct Assets {
     pub spaceship: Animation,
     pub star: Texture2D,
     pub debris: Texture2D,
-    pub lemon_pickup: Animation,
+    pub lemon_pickup: AnimationGroup,
     pub win_animation: Animation,
     pub fish: AnimationGroup,
     pub death_animations: AnimationGroup,
@@ -44,11 +44,19 @@ pub struct Assets {
     pub bullet_in_gun: Texture2D,
     pub bullet: AnimationGroup,
     pub main_menu: Texture2D,
+    pub jetpack: AnimationGroup,
+    pub left_pause: AnimationGroup,
+    pub right_pause: AnimationGroup,
+    pub lives: AnimationGroup,
 }
 
 impl Assets {
     fn new() -> Self {
         Self {
+            lives: load_animation_group(include_bytes!("../assets/lives.aseprite")),
+            left_pause: load_animation_group(include_bytes!("../assets/left_pause.aseprite")),
+            right_pause: load_animation_group(include_bytes!("../assets/right_pause.aseprite")),
+            jetpack: load_animation_group(include_bytes!("../assets/jetpack.aseprite")),
             bullet_in_gun: load_ase_texture(
                 include_bytes!("../assets/bullet_in_gun.aseprite"),
                 None,
@@ -75,7 +83,7 @@ impl Assets {
             fire_wagon: load_animation_group(include_bytes!("../assets/fire_wagon.aseprite")),
             fish: load_animation_group(include_bytes!("../assets/fish.aseprite")),
             win_animation: load_animation(include_bytes!("../assets/pirate_win.aseprite")),
-            lemon_pickup: load_animation(include_bytes!("../assets/lemon_pickup.aseprite")),
+            lemon_pickup: load_animation_group(include_bytes!("../assets/lemon_pickup.aseprite")),
             debris: load_ase_texture(include_bytes!("../assets/debris.aseprite"), None, None),
             star: load_ase_texture(include_bytes!("../assets/star.aseprite"), None, None),
             spaceship: load_animation(include_bytes!("../assets/spaceship.aseprite")),

@@ -378,6 +378,67 @@ pub static BULLET_MATERIAL: LazyLock<Material> = std::sync::LazyLock::new(|| {
     )
     .unwrap()
 });
+fn load_shader_material(
+    fragment_shader: &str,
+    uniforms: Option<Vec<(&str, UniformType)>>,
+) -> Material {
+    let pipeline = PipelineParams {
+        alpha_blend: Some(BlendState::new(
+            Equation::Add,
+            BlendFactor::Value(BlendValue::SourceAlpha),
+            BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
+        )),
+        color_blend: Some(BlendState::new(
+            Equation::Add,
+            BlendFactor::Value(BlendValue::SourceAlpha),
+            BlendFactor::OneMinusValue(BlendValue::SourceAlpha),
+        )),
+        ..Default::default()
+    };
+    let uniforms = if let Some(uniforms) = uniforms {
+        uniforms
+            .iter()
+            .map(|f| UniformDesc::new(f.0, f.1))
+            .collect()
+    } else {
+        vec![]
+    };
+    load_material(
+        ShaderSource::Glsl {
+            vertex: DEFAULT_VERTEX_SHADER,
+            fragment: fragment_shader,
+        },
+        MaterialParams {
+            pipeline_params: pipeline,
+            uniforms,
+            ..Default::default()
+        },
+    )
+    .unwrap()
+}
+pub static GRAYSCALE_MAT: LazyLock<Material> = LazyLock::new(|| {
+    // stolen from https://godotshaders.com/shader/simple-grayscale-shader-for-canvasitem/ SimranZenov
+    load_shader_material(
+        "#version 100
+precision lowp float;
+
+varying vec2 uv;
+uniform sampler2D Texture;
+
+
+
+void main() {
+  vec4 color = texture2D(Texture, uv);
+ float gray =  dot(color.rgb, vec3(0.299, 0.587, 0.114 ));
+ vec3 result = mix(vec3(gray), color.rgb, 0.);
+    gl_FragColor = vec4(result, color.a);
+
+}
+
+",
+        None,
+    )
+});
 const FISH_SHADER: &'static str = "#version 100
 precision lowp float;
 
