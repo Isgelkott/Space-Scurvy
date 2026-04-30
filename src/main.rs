@@ -306,12 +306,16 @@ impl Game {
             },
         );
     }
-    fn pause(&mut self) {
-        self.paused = Some(0.);
+    fn toggle_pause(&mut self) {
+        if self.paused.is_some() {
+            self.paused = None;
+        } else {
+            self.paused = Some(0.);
+        }
     }
-    fn update(&mut self, frame_time: f32, level_index: usize) {
-        if is_key_pressed(KeyCode::A) {
-            self.pause()
+    fn update(&mut self, frame_time: f32, level_index: usize, lives: u8) {
+        if is_key_pressed(KeyCode::Escape) {
+            self.toggle_pause()
         }
         if self.paused.is_some() {
             gl_use_material(&GRAYSCALE_MAT);
@@ -344,11 +348,11 @@ impl Game {
             );
             draw_texture_ex(
                 &self.ammo_hud_camera.render_target.as_ref().unwrap().texture,
-                (97. + SCREEN_SIZE.0 / 2. + x_distance) * self.scale_factor,
+                (SCREEN_SIZE.0 + x_distance - 64.) * self.scale_factor,
                 147. * self.scale_factor,
                 WHITE,
                 DrawTextureParams {
-                    dest_size: Some(vec2(97., 70.) * self.scale_factor),
+                    dest_size: Some(vec2(64., 64.) * self.scale_factor),
                     ..Default::default()
                 },
             );
@@ -358,6 +362,13 @@ impl Game {
                     dest_size: Some(ASSETS.lives.size() * self.scale_factor),
                     ..Default::default()
                 }),
+            );
+            draw_text(
+                &format!("{}", lives),
+                (126. + SCREEN_SIZE.0 / 2. + ASSETS.lives.size().x + 10.) * self.scale_factor,
+                (8. + x_distance + ASSETS.lives.size().y / 2.) * self.scale_factor,
+                22. * self.scale_factor,
+                WHITE,
             );
             draw_text(
                 &format!("Space Scurvy - {}", level_index),
@@ -651,7 +662,7 @@ impl GameManger {
                 if let Some(speed) = DEBUG_FLAGS.speed {
                     frame_time *= speed;
                 }
-                game.update(frame_time, self.level_index);
+                game.update(frame_time, self.level_index, self.lives);
             }
         }
     }

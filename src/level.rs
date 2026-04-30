@@ -176,6 +176,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
             }
             200..220 => {
                 // one way collision
+                visual = Some(id);
                 tile.one_way_collision = true;
             }
             221 => {

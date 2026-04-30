@@ -220,6 +220,20 @@ impl Player {
 
                                 self.velocity.y = 0.;
                             }
+                        } else if tile.one_way_collision {
+                            if y < self.size.y {
+                                continue;
+                            }
+                            if self.velocity.y.is_sign_negative() {
+                            } else {
+                                if self.pos.y + point.1 > tile_pos.y {
+                                    continue;
+                                }
+                                self.pos.y = tile_pos.y - point.1;
+                                self.grounded = true;
+
+                                self.velocity.y = 0.;
+                            }
                         } else {
                             if DEBUG_FLAGS.show_collisions {
                                 draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, RED);
