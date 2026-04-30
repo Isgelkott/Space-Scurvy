@@ -174,7 +174,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
                     341 => Pickup {
                         pickup_effect: PickupEffects::Win,
                         origin: pos,
-                        size: ASSETS.lemon_pickup.get_size(),
+                        size: ASSETS.lemon_pickup.size(),
                         animation: &ASSETS.lemon_pickup,
                     },
                     _ => panic!(),
@@ -354,6 +354,14 @@ pub struct Level {
     tileset_width: u16,
 }
 impl Level {
+    pub fn is_collider(&self, pos: Vec2) -> bool {
+        if let Some(tile) = self.get_tile(pos)
+            && tile.collision
+        {
+            return true;
+        }
+        return false;
+    }
     pub fn get_tile(&self, pos: Vec2) -> Option<&Tile> {
         let ipos = ((pos.x / TILE_SIZE) as i16, (pos.y / TILE_SIZE) as i16);
         let chunk_x = ((ipos.0 as f32 / 16.0).floor() * 16.0) as i16;

@@ -252,20 +252,24 @@ impl DrawTexture for Texture2D {
 }
 pub type Animation = (Vec<(Texture2D, u32)>, u32);
 pub trait AnimationMethods {
+    fn base(&self) -> &Texture2D;
     fn play(&self, pos: Vec2, params: Option<DrawTextureParams>);
     fn play_with_clock(&self, pos: Vec2, clock: f32, params: Option<DrawTextureParams>);
-    fn get_size(&self) -> Vec2;
+    fn size(&self) -> Vec2;
     fn get_duration(&self) -> f32;
     fn draw_index(&self, pos: Vec2, index: usize, params: Option<DrawTextureParams>);
 }
 impl AnimationMethods for Animation {
+    fn base(&self) -> &Texture2D {
+        &self.0[0].0
+    }
     fn draw_index(&self, pos: Vec2, index: usize, params: Option<DrawTextureParams>) {
         self.0[index].0.draw(pos, params);
     }
     fn get_duration(&self) -> f32 {
         self.1 as f32 / 1000.0
     }
-    fn get_size(&self) -> Vec2 {
+    fn size(&self) -> Vec2 {
         vec2(self.0[0].0.width(), self.0[0].0.height())
     }
     fn play(&self, pos: Vec2, params: Option<DrawTextureParams>) {
@@ -280,16 +284,24 @@ impl AnimationMethods for Animation {
         }
     }
     fn play_with_clock(&self, pos: Vec2, clock: f32, params: Option<DrawTextureParams>) {
+        let mut indexus = self.0.len() - 1;
         let mut frame = (clock * 1000.0) as u32;
-        for i in self.0.iter() {
+        for (index, i) in self.0.iter().enumerate() {
             if frame > i.1 {
                 frame -= i.1
             } else {
-                draw_texture_ex(&i.0, pos.x, pos.y, WHITE, params.unwrap_or_default());
+                indexus = index;
 
                 break;
             }
         }
+        draw_texture_ex(
+            &self.0[indexus].0,
+            pos.x,
+            pos.y,
+            WHITE,
+            params.unwrap_or_default(),
+        );
     }
 }
 #[derive(Debug)]
@@ -307,8 +319,8 @@ impl AnimationGroup {
     pub fn base(&self) -> &Animation {
         self.get("base")
     }
-    pub fn get_size(&self) -> Vec2 {
-        self.0.values().next().unwrap().get_size()
+    pub fn size(&self) -> Vec2 {
+        self.0.values().next().unwrap().size()
     }
     pub fn play_tag(&self, tag: &str, pos: Vec2, params: Option<DrawTextureParams>) {
         self.get(tag).play(pos, params);

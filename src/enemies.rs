@@ -5,7 +5,8 @@ use macroquad::prelude::*;
 use crate::{
     assets::ASSETS,
     level::{self, Level, SpecialTileData, TILE_SIZE, floored_pos},
-    player::{GRAVITY, Player},
+    particles::Particle,
+    player::{Bullet, GRAVITY, Player},
     projectiles::Projectile,
     utils::*,
 };
@@ -61,7 +62,6 @@ fn is_grounded_and_check_bounds(
                 let tile_pos = floored_pos(map_pos);
                 if tile.collision {
                     if DEBUG_FLAGS.show_collisions {
-                        dbg!(tile_pos);
                         draw_rectangle(tile_pos.x, tile_pos.y, 5.0, 5.0, BLUE);
                     }
 
@@ -118,9 +118,6 @@ fn is_grounded_and_check_bounds(
                 dbg!("out of bounds :(");
             }
         }
-    }
-    if grounded {
-        dbg!(grounded, collid_with_wall);
     }
 
     return (grounded, collid_with_wall);
@@ -206,19 +203,63 @@ pub enum CollisionType<'a> {
 pub fn update_enemies(
     enemies: &mut Vec<NewEnemy>,
     player: &Player,
-    map: &Level,
+    level: &Level,
     projectiles: &mut Vec<Projectile>,
     frame_time: f32,
+    bullets: &mut Vec<Bullet>,
+    particles: &mut Vec<Particle>,
 ) {
     for enemy in enemies.iter_mut() {
-        enemy.beahavior.update(
-            &mut enemy.pos,
-            &mut enemy.size,
-            player,
-            map,
-            projectiles,
-            frame_time,
-        );
+        bullets.retain_mut(|bullet| {
+            for i in 0..2 {
+                let bullet_pos =
+                    bullet.pos - vec2(i as f32 * TILE_SIZE * bullet.direction.signum(), 0.);
+                if check_collision_rectangle_collision(
+                    (enemy.pos, enemy.size),
+                    (bullet_pos, bullet.size),
+                ) {
+                    enemy.kill();
+                    particles.push(Particle::preset(
+                        crate::particles::Particles::Blood,
+                        bullet_pos,
+                    ));
+                    return false;
+                }
+            }
+            return true;
+        });
+        if let Some((time, fall_velocity)) = &mut enemy.die {
+            *time += frame_time;
+            enemy.animations.get("die").play_with_clock(
+                enemy.pos + vec2(0., 4.),
+                *time,
+                Some(DrawTextureParams {
+                    flip_x: enemy.flipped,
+                    ..Default::default()
+                }),
+            );
+            let (grounded, _) = is_grounded_and_check_bounds(
+                &mut enemy.pos,
+                &mut enemy.size,
+                &mut vec2(0., *fall_velocity),
+                frame_time,
+                level,
+            );
+            if !grounded {
+                *fall_velocity += GRAVITY * frame_time;
+                enemy.pos.y += *fall_velocity * frame_time;
+            }
+        } else {
+            enemy.beahavior.update(
+                &mut enemy.pos,
+                &mut enemy.size,
+                player,
+                level,
+                projectiles,
+                frame_time,
+                &mut enemy.flipped,
+            );
+        }
     }
 }
 
@@ -232,6 +273,7 @@ pub trait EnemyBehaviour {
         map: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
+        flipped: &mut bool,
     );
     fn new(pos: Vec2, level: &Level) -> Self
     where
@@ -241,12 +283,16 @@ pub struct NewEnemy {
     pub pos: Vec2,
     pub size: Vec2,
     animations: &'static AnimationGroup,
-
+    pub die: Option<(f32, f32)>,
+    flipped: bool,
     beahavior: Box<dyn EnemyBehaviour>,
     enemy: PresetEnemies,
     clock: f32,
 }
 impl NewEnemy {
+    pub fn kill(&mut self) {
+        self.die = Some((0., 0.))
+    }
     pub fn new(preset: PresetEnemies, pos: Vec2, level: &Level) -> Self {
         let animations;
         let behaviour: Box<dyn EnemyBehaviour>;
@@ -264,28 +310,23 @@ impl NewEnemy {
                 animations = &ASSETS.fire_wagon;
                 behaviour = Box::new(FireWagon::new(pos, level))
             }
+            PresetEnemies::BombChain => {
+                animations = &ASSETS.bomb_chain;
+                behaviour = Box::new(BombChain::new(pos, level))
+            }
             _ => panic!(),
         };
 
         Self {
-            animations,
+            flipped: false,
             clock: 0.0,
             pos,
-            size: animations.get_size(),
+            animations,
+            die: None,
+            size: animations.size(),
             beahavior: behaviour,
             enemy: preset,
         }
-    }
-    fn update(
-        &mut self,
-        size: &mut Vec2,
-        player: &Player,
-        map: &Level,
-        projectiles: &mut Vec<Projectile>,
-        frame_time: f32,
-    ) {
-        self.beahavior
-            .update(&mut self.pos, size, player, map, projectiles, frame_time);
     }
 }
 struct Fish {
@@ -317,6 +358,7 @@ impl EnemyBehaviour for Fish {
         map: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
+        flipped: &mut bool,
     ) {
         self.attack_cooldown -= frame_time;
         if pos.y > self.origin.y {
@@ -401,6 +443,7 @@ impl EnemyBehaviour for FireWagon {
         map: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
+        flipped: &mut bool,
     ) {
         let (grounded, collid_with_wall) =
             is_grounded_and_check_bounds(pos, size, &mut self.velocity, frame_time, map);
@@ -447,7 +490,7 @@ impl EnemyBehaviour for BombChain {
             rotation: 0.0,
             bomb_pos: Vec2::ZERO,
             has_bomb: true,
-            origin: pos,
+            origin: pos + TILE_SIZE / 2.,
         }
     }
 
@@ -459,15 +502,16 @@ impl EnemyBehaviour for BombChain {
         map: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
+        flipped: &mut bool,
     ) {
         self.rotation += 5.0 * frame_time;
         let bomb = &ASSETS.bomb_chain;
         self.bomb_pos = self.origin
-            + (ASSETS.bomb_chain.width() + bomb.height() * 0.55)
+            + (ASSETS.bomb_chain.base().size().x)
                 * vec2((self.rotation).cos(), (self.rotation).sin())
-            - *size / 2.0;
+            - ASSETS.bomb.size() / 2.;
         draw_texture_ex(
-            &ASSETS.bomb_chain,
+            ASSETS.bomb_chain.base().base(),
             self.origin.x,
             self.origin.y,
             WHITE,
@@ -484,7 +528,7 @@ impl EnemyBehaviour for BombChain {
                 self.bomb_pos.y,
                 WHITE,
                 DrawTextureParams {
-                    rotation: self.rotation + PI / 2.0,
+                    rotation: self.rotation + PI / 2.0 + 0.4,
                     pivot: (Some(self.bomb_pos + ASSETS.bomb.size() / 2.0)),
                     ..Default::default()
                 },
@@ -515,6 +559,7 @@ impl EnemyBehaviour for MachineGunner {
         map: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
+        flipped: &mut bool,
     ) {
         if !self.hit {
             self.flipped = player.pos.x > self.pos.x;
@@ -606,6 +651,7 @@ impl EnemyBehaviour for Jetpacker {
         level: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
+        flipped: &mut bool,
     ) {
         const SPEED: f32 = 75.0;
         const STALL_DURATION: f32 = 1.2;
@@ -654,5 +700,6 @@ impl EnemyBehaviour for Jetpacker {
                 }
             }
         }
+        *flipped = self.flipped;
     }
 }

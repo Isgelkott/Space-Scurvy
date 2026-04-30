@@ -53,7 +53,7 @@ impl BackgroundObject {
         }
 
         let size = match &object.0 {
-            DisplayType::Animation(animation) => animation.get_size(),
+            DisplayType::Animation(animation) => animation.size(),
             DisplayType::Texture(texture) => texture.size(),
         };
         let rotation_mod = if let Some(rotation_mod) = object.1 {
@@ -76,7 +76,7 @@ impl BackgroundObject {
         self.rotation += self.rotation_mod;
         match &self.display {
             DisplayType::Animation(animation) => {
-                size = animation.get_size();
+                size = animation.size();
                 animation.play(
                     self.pos,
                     Some(DrawTextureParams {
@@ -159,14 +159,14 @@ impl SpaceShip {
             );
         }
         let colors = [RED, ORANGE, YELLOW, GREEN, BLUE, DARKBLUE];
-        let middle = self.pos + self.animation.get_size() / 2.0;
+        let middle = self.pos + self.animation.size() / 2.0;
         for (index, color) in colors.iter().enumerate() {
             draw_rectangle(
                 self.origin.x.clamp(self.pos.x - 100.0, self.pos.x + 100.0),
                 middle.y - 3.0 + index as f32,
                 (self.pos.x - self.origin.x.clamp(self.pos.x - 100.0, self.pos.x + 100.0))
                     + if self.direction.x.is_sign_negative() {
-                        self.animation.get_size().x - 5.0
+                        self.animation.size().x - 5.0
                     } else {
                         5.0
                     },
@@ -184,6 +184,7 @@ pub struct Background {
     spawn_chunks: Vec<f32>,
     size: Vec2,
     star_amount: u32,
+    spawn_cooldown: f32,
 }
 const OBJECT_SIZE: usize = 128;
 
@@ -197,6 +198,7 @@ impl Background {
         let stars = Vec::new();
 
         Self {
+            spawn_cooldown: 0.,
             stars,
             objects: Vec::new(),
             last_object: DisplayType::Texture(Texture2D::empty()),
@@ -207,6 +209,7 @@ impl Background {
         }
     }
     pub fn update(&mut self, frame_time: f32) {
+        self.spawn_cooldown -= frame_time;
         for (index, spaceship) in self.spaceships.iter_mut().enumerate() {
             if spaceship.pos.x < 0.0 || spaceship.pos.x > self.size.x {
                 println!("wa");
@@ -258,11 +261,10 @@ impl Background {
                 checked.push(rand);
             }
         }
-        self.stars.retain(|f| {
-            return true;
-            f.pos.x < self.size.x || f.pos.y < self.size.y
-        });
-        while self.stars.len() < self.star_amount as usize {
+        self.stars
+            .retain(|f| f.pos.x < self.size.x || f.pos.y < self.size.y);
+        while self.spawn_cooldown.is_sign_negative() && self.stars.len() < self.star_amount as usize
+        {
             self.stars.push(Star::new(
                 vec2(gen_range(0.0, self.size.x) - self.size.y * PI / 4.0, 0.0).floor(),
                 self.size,

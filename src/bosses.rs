@@ -122,14 +122,14 @@ impl RedGuy {
         let stand_animation;
         let barrel_animation;
         let center =
-            self.cannon.pos + vec2(65., 14.) - vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0);
+            self.cannon.pos + vec2(65., 14.) - vec2(ASSETS.cannon_barrel.size().x / 2.0, 0.0);
 
         let shoot_point = vec2(center.x, center.y);
         let boss_center = vec2(
-            self.pos.x + ASSETS.red_boss.get_size().x,
-            self.pos.y + ASSETS.red_boss.get_size().y,
+            self.pos.x + ASSETS.red_boss.size().x,
+            self.pos.y + ASSETS.red_boss.size().y,
         );
-        let desired_angle = (self.pos + ASSETS.red_boss.get_size() / 2.0 - center);
+        let desired_angle = (self.pos + ASSETS.red_boss.size() / 2.0 - center);
         let difference =
             desired_angle.angle_between(vec2(self.cannon.angle.cos(), self.cannon.angle.sin()));
         if (difference - PI).abs() < 0.2 {
@@ -176,7 +176,7 @@ impl RedGuy {
             center,
             Some(DrawTextureParams {
                 rotation: self.cannon.angle + PI / 2.0,
-                pivot: Some(center + vec2(ASSETS.cannon_barrel.get_size().x / 2.0, 0.0)),
+                pivot: Some(center + vec2(ASSETS.cannon_barrel.size().x / 2.0, 0.0)),
 
                 ..Default::default()
             }),
@@ -199,11 +199,11 @@ impl RedGuy {
         vec2(
             gen_range(
                 allowed_area.0.x + HOVER_RANGE.0,
-                allowed_area.1.x - 2.0 * ASSETS.red_boss.get_size().x - HOVER_RANGE.0,
+                allowed_area.1.x - 2.0 * ASSETS.red_boss.size().x - HOVER_RANGE.0,
             ),
             gen_range(
                 allowed_area.1.y - HOVER_RANGE.1 - TILE_SIZE * 4.0,
-                allowed_area.1.y - ASSETS.red_boss.get_size().y * 2.0 - HOVER_RANGE.1,
+                allowed_area.1.y - ASSETS.red_boss.size().y * 2.0 - HOVER_RANGE.1,
             ),
         )
     }
@@ -334,7 +334,7 @@ impl Boss for RedGuy {
         particles: &mut Vec<Particle>,
     ) {
         let params = DrawTextureParams {
-            dest_size: Some(ASSETS.red_boss.get_size() * 2.0),
+            dest_size: Some(ASSETS.red_boss.size() * 2.0),
             ..Default::default()
         };
         let draw_pos = self.pos;
@@ -535,7 +535,7 @@ impl Boss for RedGuy {
 
         if let Some(shot) = &mut self.cannon.shot {
             dbg!(shot.pos);
-            let boss_size = ASSETS.red_boss.get_size();
+            let boss_size = ASSETS.red_boss.size();
             if shot.pos.x > self.pos.x
                 && shot.pos.x < self.pos.x + boss_size.x
                 && shot.pos.y > self.pos.y
@@ -545,7 +545,7 @@ impl Boss for RedGuy {
                     Box::new(|f| ASSETS.cannon_shot_particle.play(f, None)),
                     particles::Lifetime::ByTime(ASSETS.cannon_shot_particle.get_duration()),
                     None,
-                    vec2(shot.pos.x - ASSETS.cannon_shot_particle.get_size().x, 0.0),
+                    vec2(shot.pos.x - ASSETS.cannon_shot_particle.size().x, 0.0),
                 ));
                 self.cannon.shot = None;
             } else {

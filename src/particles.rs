@@ -13,6 +13,8 @@ pub enum Lifetime {
 pub enum Particles {
     Explosion,
     EnergyBallShatter,
+    BulletSpark,
+    Blood,
 }
 pub struct Particle {
     draw: Box<dyn Fn(Vec2) -> ()>,
@@ -39,6 +41,22 @@ impl Particle {
             Particles::EnergyBallShatter => Particle::new(
                 Box::new(|f| {
                     ASSETS.energy_ball_shatter.play(f, None);
+                }),
+                crate::particles::Lifetime::ByTime(ASSETS.energy_ball_shatter.1 as f32 / 1000.0),
+                None,
+                pos,
+            ),
+            Particles::BulletSpark => Particle::new(
+                Box::new(|f| {
+                    ASSETS.bullet.get("spark").play(f, None);
+                }),
+                crate::particles::Lifetime::ByTime(ASSETS.energy_ball_shatter.1 as f32 / 1000.0),
+                None,
+                pos,
+            ),
+            Particles::Blood => Particle::new(
+                Box::new(|f| {
+                    ASSETS.bullet.get("blood").play(f, None);
                 }),
                 crate::particles::Lifetime::ByTime(ASSETS.energy_ball_shatter.1 as f32 / 1000.0),
                 None,

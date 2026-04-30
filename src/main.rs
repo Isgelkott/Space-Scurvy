@@ -1,5 +1,7 @@
 #![allow(unused_variables)]
 
+use std::f32::consts::{PI, TAU};
+
 use enemies::*;
 use level::*;
 use macroquad::prelude::*;
@@ -31,6 +33,10 @@ struct CameraHolder {
     desired_y: f32,
 }
 impl CameraHolder {
+    pub fn is_obj_in_view(&self, obj: Vec2) -> bool {
+        return !(obj.x < self.pos.x - SCREEN_SIZE.0 / 2.
+            || obj.x > self.pos.x + SCREEN_SIZE.0 / 2.);
+    }
     fn update(&mut self, player: &Player, level: &Level) {
         let mut pos = player.pos;
         let mut c = 0;
@@ -102,10 +108,13 @@ pub struct Game {
     projectiles: Vec<Projectile>,
     particles: Vec<Particle>,
     map_animations: Vec<MapAnimation>,
+    bullets: Vec<Bullet>,
+    gun_animation: f32,
 }
 impl Game {
-    fn draw_hud(&self) {
+    fn draw_hud(&mut self, frame_time: f32) {
         set_default_camera();
+        self.draw_ammo(frame_time);
 
         for x in 0..5 {
             let x = x as f32;
@@ -138,6 +147,8 @@ impl Game {
             enemies.push(NewEnemy::new(*preset, *pos, &map))
         }
         Self {
+            gun_animation: -0.0,
+            bullets: Vec::new(),
             boss: if let Some((boss, tile)) = special_data.boss {
                 Some(boss.to_boss(tile, &map))
             } else {
@@ -146,12 +157,14 @@ impl Game {
             die: false,
             win: false,
             pickups: special_data.pickups,
-            backgrounds: Background::new(vec2(
-                map.chunks.iter().map(|f| f.pos.0).max().unwrap() as f32
-                    - map.chunks.iter().map(|f| f.pos.0).min().unwrap() as f32,
-                map.chunks.iter().map(|f| f.pos.1).max().unwrap() as f32
-                    - map.chunks.iter().map(|f| f.pos.1).min().unwrap() as f32,
-            )),
+            backgrounds: Background::new(
+                vec2(
+                    map.chunks.iter().map(|f| f.pos.0).max().unwrap() as f32
+                        - map.chunks.iter().map(|f| f.pos.0).min().unwrap() as f32,
+                    map.chunks.iter().map(|f| f.pos.1).max().unwrap() as f32
+                        - map.chunks.iter().map(|f| f.pos.1).min().unwrap() as f32,
+                ) * TILE_SIZE,
+            ),
             scale_factor: 1.0,
             particles: Vec::new(),
             projectiles: Vec::new(),
@@ -217,8 +230,7 @@ impl Game {
                 self.die = true;
             } else {
                 animation.play_with_clock(
-                    self.player.pos - ASSETS.death_animations.get_size() / 2.0
-                        + self.player.size / 2.0,
+                    self.player.pos - ASSETS.death_animations.size() / 2.0 + self.player.size / 2.0,
                     death.1,
                     Some(DrawTextureParams {
                         flip_x: self.player.previous_flipped,
@@ -227,6 +239,64 @@ impl Game {
                 );
             }
         }
+    }
+    fn draw_ammo(&mut self, frame_time: f32) {
+        self.gun_animation -= frame_time;
+        let render_target = render_target(64, 64);
+        render_target.texture.set_filter(FilterMode::Nearest);
+
+        let mut render_target_cam = Camera2D::from_display_rect(Rect::new(0., 0., 64., 64.));
+        render_target_cam.render_target = Some(render_target.clone());
+        set_camera(&render_target_cam);
+        let texture = &ASSETS.gun_inside;
+
+        draw_texture(texture, 0., 0., WHITE);
+        let center_gun = vec2(texture.width() / 2., texture.height() / 2.);
+        const MAX_AMMO: u8 = 6;
+        for i in 0..MAX_AMMO {
+            let angle = 2. * PI / MAX_AMMO as f32 * i as f32;
+            let y = 22. * angle.sin();
+            let x = 22. * angle.cos();
+            let bullet_center = vec2(center_gun.x + x, center_gun.y + y);
+            if i < self.player.ammo {
+                draw_texture_ex(
+                    &ASSETS.bullet_in_gun,
+                    bullet_center.x - ASSETS.bullet_in_gun.width() / 2.,
+                    bullet_center.y - ASSETS.bullet_in_gun.height() / 2.,
+                    WHITE,
+                    DrawTextureParams {
+                        dest_size: Some(ASSETS.bullet_in_gun.size()),
+                        ..Default::default()
+                    },
+                );
+            } else {
+                draw_circle(bullet_center.x, bullet_center.y, 5., BLACK);
+            }
+        }
+        set_default_camera();
+        const ROT_OFFSET: f32 = PI / 3.;
+        let mut rotation =
+            2. * PI / MAX_AMMO as f32 * self.player.ammo as f32 - PI / 2. - ROT_OFFSET;
+        if self.gun_animation.is_sign_positive() {
+            rotation = (2. * PI / MAX_AMMO as f32 * self.player.ammo as f32 - PI / 2. - ROT_OFFSET)
+                .lerp(
+                    2. * PI / MAX_AMMO as f32 * (self.player.ammo as f32 + 1.)
+                        - PI / 2.
+                        - ROT_OFFSET,
+                    self.gun_animation / GUN_ANIMATION_LENGHT,
+                );
+        }
+        draw_texture_ex(
+            &render_target_cam.render_target.unwrap().texture,
+            0.,
+            screen_height() - ASSETS.gun_inside.height() * self.scale_factor,
+            WHITE,
+            DrawTextureParams {
+                dest_size: Some(ASSETS.gun_inside.size() * self.scale_factor),
+                rotation,
+                ..Default::default()
+            },
+        );
     }
     async fn update(&mut self, frame_time: f32) {
         clear_background(BLACK);
@@ -242,8 +312,16 @@ impl Game {
             );
         }
         self.map.draw_level();
-
-        // update_map_animations(&mut self.map_animations);
+        self.bullets.retain_mut(|bullet| {
+            let should_live = bullet.update(frame_time, &self.camera_holder, &self.map);
+            if !should_live {
+                self.particles.push(Particle::preset(
+                    particles::Particles::BulletSpark,
+                    bullet.pos,
+                ));
+            }
+            return should_live;
+        });
 
         self.projectiles.retain_mut(|projectile| {
             projectile.update(&mut self.player, frame_time, &self.map, &mut self.particles)
@@ -256,6 +334,8 @@ impl Game {
                 &mut self.particles,
                 frame_time,
                 &mut self.camera_holder,
+                &mut self.bullets,
+                &mut self.gun_animation,
             );
             self.camera_holder.update(&self.player, &self.map);
         }
@@ -277,6 +357,8 @@ impl Game {
             &mut self.map,
             &mut self.projectiles,
             frame_time,
+            &mut self.bullets,
+            &mut self.particles,
         );
         // update_particle_generators(&mut self.map.tiles, &mut self.particles, frame_time);
         update_particles(&mut self.particles, frame_time);
@@ -338,6 +420,7 @@ impl GameManger {
                 frame_time *= speed;
             }
             self.game.update(frame_time).await;
+
             let mut black_bars: bool = false;
 
             let transition_length = 2.0;
@@ -345,15 +428,13 @@ impl GameManger {
                 let pos = vec2(
                     self.game.player.pos.x
                         - if self.game.player.previous_flipped {
-                            (ASSETS.jetpacker.get("idle").get_size().x
-                                + ASSETS.win_animation.get_size().x)
+                            (ASSETS.jetpacker.get("idle").size().x + ASSETS.win_animation.size().x)
                                 / 2.0
                         } else {
                             0.0
                         },
                     self.game.player.pos.y
-                        - (ASSETS.win_animation.get_size().y
-                            - ASSETS.jetpacker.get("idle").get_size().y),
+                        - (ASSETS.win_animation.size().y - ASSETS.jetpacker.get("idle").size().y),
                 );
                 self.clock += frame_time;
                 if self.clock > ASSETS.win_animation.get_duration() + transition_length {
@@ -383,6 +464,7 @@ impl GameManger {
                 }
             }
             self.game.draw_camera();
+            self.game.draw_ammo(frame_time);
             if black_bars {
                 draw_rectangle(
                     0.0,
@@ -403,7 +485,7 @@ impl GameManger {
                     BLACK,
                 );
             }
-            self.game.draw_hud();
+            self.game.draw_hud(frame_time);
         }
     }
 }

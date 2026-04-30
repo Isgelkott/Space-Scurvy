@@ -22,7 +22,7 @@ pub struct Assets {
     pub lemon: Texture2D,
     pub fire_wagon: AnimationGroup,
     pub blood: Animation,
-    pub bomb_chain: Texture2D,
+    pub bomb_chain: AnimationGroup,
     pub bomb: Texture2D,
     pub bomb_explode: Animation,
     pub background_objects: Vec<(DisplayType, Option<f32>)>,
@@ -40,11 +40,19 @@ pub struct Assets {
     pub cannon_barrel: AnimationGroup,
     pub lever: AnimationGroup,
     pub cannon_shot_particle: Animation,
+    pub gun_inside: Texture2D,
+    pub bullet_in_gun: Texture2D,
+    pub bullet: AnimationGroup,
 }
 
 impl Assets {
     fn new() -> Self {
         Self {
+            bullet_in_gun: load_ase_texture(
+                include_bytes!("../assets/bullet_in_gun.aseprite"),
+                None,
+                None,
+            ),
             cannon_barrel: load_animation_group(include_bytes!("../assets/cannon_barrel.aseprite")),
             cannon: load_animation_group(include_bytes!("../assets/cannon.aseprite")),
             rocket: load_animation_group(include_bytes!("../assets/rocket.aseprite")),
@@ -95,11 +103,8 @@ impl Assets {
                 ),
             ],
             bomb_explode: load_animation(include_bytes!("../assets/bomb_explode.aseprite")),
-            bomb_chain: load_ase_texture(
-                include_bytes!("../assets/bomb_chain.aseprite"),
-                None,
-                None,
-            ),
+            bomb_chain: load_animation_group(include_bytes!("../assets/bomb_chain.aseprite")),
+
             bomb: load_ase_texture(include_bytes!("../assets/bomb.aseprite"), None, None),
             blood: load_animation(include_bytes!("../assets/blood.aseprite")),
 
@@ -119,6 +124,12 @@ impl Assets {
             cannon_shot_particle: load_animation(include_bytes!(
                 "../assets/laserparticle.aseprite"
             )),
+            gun_inside: load_ase_texture(
+                include_bytes!("../assets/gun_inside.aseprite"),
+                None,
+                None,
+            ),
+            bullet: load_animation_group(include_bytes!("../assets/bullet.aseprite")),
         }
     }
 }

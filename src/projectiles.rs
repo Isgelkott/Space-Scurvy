@@ -93,7 +93,7 @@ impl Projectile {
                 particle: Some(Particles::Explosion),
                 behaviour: ProjectileBehaviour::FollowPlayer,
                 pos,
-                size: ASSETS.rocket.get_size(),
+                size: ASSETS.rocket.size(),
                 damage: 200,
                 direction,
                 speed: 120.0,
@@ -111,7 +111,7 @@ impl Projectile {
             },
             Projectiles::EnergyBall => Self {
                 pos,
-                size: ASSETS.energy_ball.get_size(),
+                size: ASSETS.energy_ball.size(),
                 damage: 20,
                 draw: Box::new(|pos, size, rotation| {
                     ASSETS.energy_ball.play(pos, None);

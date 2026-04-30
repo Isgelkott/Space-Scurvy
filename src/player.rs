@@ -10,7 +10,34 @@ use crate::{
     utils::{Animation, *},
 };
 use macroquad::prelude::*;
+pub struct Bullet {
+    pub pos: Vec2,
+    pub size: Vec2,
+    origin: Vec2,
+    pub direction: f32,
+}
+impl Bullet {
+    pub fn update(&mut self, frame_time: f32, camera: &CameraHolder, level: &Level) -> bool {
+        const BULLET_SPEED: f32 = 480.;
+        self.pos.x += self.direction * BULLET_SPEED * frame_time;
+        if camera.is_obj_in_view(self.pos) {
+            ASSETS.bullet.base().play(self.pos, None);
+        }
 
+        return !level.is_collider(self.pos);
+    }
+    pub fn new(pos: Vec2, direction: f32) -> Self {
+        let pos = pos + vec2(0., 16.);
+        let size = ASSETS.bullet.size();
+
+        Self {
+            pos,
+            origin: pos,
+            direction,
+            size,
+        }
+    }
+}
 pub struct Player {
     pub hp: u32,
     pub pos: Vec2,
@@ -23,6 +50,7 @@ pub struct Player {
     iframes: Option<f32>,
     pub death: Option<(DeathCause, f32)>,
     last_pos: Vec2,
+    pub ammo: u8,
 }
 const FRICITON: f32 = 1.0;
 pub const GRAVITY: f32 = 900.;
@@ -33,6 +61,7 @@ pub enum DeathCause {
     Energy,
     Explode,
 }
+pub const GUN_ANIMATION_LENGHT: f32 = 1.;
 impl Player {
     pub fn center(&self) -> Vec2 {
         self.pos + self.size / 2.
@@ -53,6 +82,7 @@ impl Player {
     }
     pub fn new(pos: Vec2) -> Self {
         Self {
+            ammo: 6,
             death: None,
             iframes: None,
             hp: 100,
@@ -75,6 +105,8 @@ impl Player {
         particles: &mut Vec<Particle>,
         frame_time: f32,
         camera: &mut CameraHolder,
+        bullets: &mut Vec<Bullet>,
+        gun_animation: &mut f32,
     ) {
         const JUMP_HEIGHT: f32 = -320.0;
 
@@ -121,6 +153,9 @@ impl Player {
             self.grounded = false;
             const HITBOX_SHRINK_AMOUNT: f32 = 4.;
             enemies.retain_mut(|enemy| {
+                if enemy.die.is_some() {
+                    return true;
+                }
                 let is_coliding = check_collision_rectangle_collision(
                     (self.pos, self.size),
                     (
@@ -129,40 +164,17 @@ impl Player {
                     ),
                 );
                 if is_coliding {
-                    if self.last_pos.y + self.size.y < enemy.pos.y {
+                    if self.last_pos.y + self.size.y < enemy.pos.y + 4. {
+                        self.velocity.y = JUMP_HEIGHT;
+                        enemy.kill();
+                        return false;
+                    } else {
                         self.knockback(enemy.pos + enemy.size / 2., 30.);
                         self.damage(15, DeathCause::Default);
-                    } else {
-                        self.velocity.y = JUMP_HEIGHT;
-                        return false;
                     }
                 }
                 return true;
             });
-            // while !to_check.is_empty() {
-            //     to_check.retain_mut(|tile| {
-            //         let tile = *tile;
-            //         if !checked.contains(&tile)
-            //             && let Some(trigger) = &mut pottential_collider.trigger
-            //         {
-            //             *trigger = true;
-            //             let check = [
-            //                 tile.saturating_sub(1),
-            //                 tile + 1,
-            //                 tile.saturating_sub(map.width),
-            //                 tile + map.width,
-            //             ];
-            //             for i in check {
-            //                 buffer.push(i);
-            //             }
-            //             checked.insert(tile);
-            //             return false;
-            //         } else {
-            //             return false;
-            //         }
-            //     });
-            //     to_check.append(&mut buffer);
-            // }
 
             for y in (0..(self.size.y / 16.0) as i16 + 1).rev() {
                 let y = ((y * 16) as f32).min(self.size.y);
@@ -262,20 +274,14 @@ impl Player {
             if shader {
                 gl_use_material(&IFRAMES_MATERIAL);
             }
-            if is_key_pressed(KeyCode::F) {
+            if is_key_pressed(KeyCode::F) && self.ammo > 0 {
                 self.current_top_animation = Some((&ASSETS.player.get("shoot"), 0.0));
-                // projectiles.push(Box::new(Bullet::new(
-                //     self.pos
-                //         + vec2(
-                //             if !params.flip_x {
-                //                 self.size.x - 2.0
-                //             } else {
-                //                 2.0
-                //             },
-                //             14.0,
-                //         ),
-                //     vec2(if !params.flip_x { 1.0 } else { -1.0 }, 0.0),
-                // )));
+                bullets.push(Bullet::new(
+                    self.pos,
+                    if self.previous_flipped { -1. } else { 1. },
+                ));
+                *gun_animation = GUN_ANIMATION_LENGHT;
+                self.ammo -= 1;
             }
 
             let jump_anim = ASSETS.player.get("jump");
@@ -309,12 +315,7 @@ impl Player {
 
                 bot_animation.play(self.pos, Some(params.clone()));
             }
-            // if self.velocity.x.abs() < 2. {
-            //     self.velocity.x = 0.0
-            // }
-            // if self.velocity.y.abs() < 2. {
-            //     self.velocity.y = 0.0
-            // }
+
             if !DEBUG_FLAGS.still {
                 self.last_pos = self.pos;
                 self.pos += self.velocity * frame_time;
