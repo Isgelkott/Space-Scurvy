@@ -30,10 +30,10 @@ impl Particle {
     pub fn preset(particle: Particles, pos: Vec2) -> Self {
         match &particle {
             Particles::Explosion => {
-                let animation = ASSETS.rocket.get("explode");
+                let animation = ASSETS.rocket.get("particle");
                 Self::new(
-                    Box::new(|f| ASSETS.rocket.get("explode").play(f, None)),
-                    Lifetime::ByTime((animation.get_duration())),
+                    Box::new(|f| ASSETS.rocket.get("particle").play(f, None)),
+                    Lifetime::ByTime(animation.get_duration()),
                     None,
                     pos,
                 )

@@ -16,6 +16,7 @@ const PAD_TIME: f32 = 10.;
 const PAD_COOLDOWN: f32 = 0.;
 const PAD_EXPIRE: f32 = 14.;
 const SHOOT_DURATION: f32 = 0.4;
+const HOVER_RANGE: f32 = 20.;
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum RedGuyPhase {
     ShootRocket,
@@ -25,7 +26,6 @@ enum RedGuyPhase {
     Shoot(PresetEnemies),
     Entry,
 }
-const HOVER_RANGE: (f32, f32) = (40.0, 20.0);
 #[derive(PartialEq, Debug)]
 enum CannonActions {
     Shoot,
@@ -121,6 +121,8 @@ pub struct RedGuy {
     incoming_rocket: Option<(Vec2, f32)>,
     cannon: Cannon,
     pad: PadState,
+    pub lives: u8,
+    active: bool,
 }
 impl RedGuy {
     fn update_cannon(&mut self, frame_time: f32, player: &Player) {
@@ -142,9 +144,7 @@ impl RedGuy {
         } else {
             self.cannon.angle += difference.signum() * frame_time;
         }
-        if is_key_pressed(KeyCode::B) {
-            self.cannon.action = CannonActions::Shoot;
-        }
+
         let shoot_point = vec2(
             center.x
                 + -(ASSETS.cannon_barrel.size().y) * self.cannon.angle.cos()
@@ -154,39 +154,8 @@ impl RedGuy {
                 + (self.cannon.angle - PI / 2.).sin() * -8.,
         );
 
-        match self.cannon.action {
-            CannonActions::OnCooldown(duration) => {
-                stand_animation = ASSETS.cannon.get("cooldown");
-                barrel_animation = ASSETS.cannon_barrel.get("cooldown");
-                if self.cannon.clock > duration {
-                    self.cannon.action = CannonActions::Idle;
-                    self.cannon.clock = 0.0;
-                }
-            }
-            CannonActions::Shoot => {
-                let flipped = direction.x.is_sign_positive();
-                barrel_animation = ASSETS.cannon_barrel.get("shoot");
-                stand_animation = ASSETS.cannon.get("idle");
-                let duration = barrel_animation.get_duration();
-
-                if self.cannon.clock > duration {
-                    self.cannon.shot = Some(SHOOT_DURATION);
-                    dbg!("wa");
-                    // self.cannon.action = CannonActions::OnCooldown(Cannon::cooldown());
-                    self.cannon.clock = 0.0;
-                }
-            }
-            CannonActions::Idle => {
-                stand_animation = ASSETS.cannon.get("idle");
-                barrel_animation = ASSETS.cannon_barrel.get("idle");
-                let switch_pos = self.cannon.pos + vec2(66.0, 72.0);
-
-                if is_key_pressed(KeyCode::E) && (player.pos.x - switch_pos.x).abs() < 100.0 {
-                    self.cannon.action = CannonActions::Shoot;
-                    self.cannon.clock = 0.0;
-                }
-            }
-        }
+        stand_animation = ASSETS.cannon.get("idle");
+        barrel_animation = ASSETS.cannon_barrel.get("cooldown");
 
         stand_animation.play(self.cannon.pos, None);
         barrel_animation.play(
@@ -217,12 +186,12 @@ impl RedGuy {
     fn new_location(allowed_area: (Vec2, Vec2)) -> Vec2 {
         vec2(
             gen_range(
-                allowed_area.0.x + HOVER_RANGE.0,
-                allowed_area.1.x - 2.0 * ASSETS.red_boss.size().x - HOVER_RANGE.0,
+                allowed_area.0.x,
+                allowed_area.1.x - 2.0 * ASSETS.red_boss.size().x,
             ),
             gen_range(
-                allowed_area.0.y + HOVER_RANGE.1 - TILE_SIZE * 4.0,
-                allowed_area.1.y - ASSETS.red_boss.size().y * 2.0 - HOVER_RANGE.1,
+                allowed_area.0.y - TILE_SIZE * 5.0,
+                allowed_area.1.y - ASSETS.red_boss.size().y - TILE_SIZE * 4.,
             ),
         )
     }
@@ -259,6 +228,8 @@ impl RedGuy {
     }
     pub fn new(pos: Vec2) -> Self {
         Self {
+            active: false,
+            lives: 3,
             pad: PadState::Timer(PAD_COOLDOWN),
             cannon: Cannon::new(),
             incoming_rocket: None,
@@ -267,7 +238,7 @@ impl RedGuy {
             catapult: load_pixel_map(&ASSETS.red_boss.get("catapult"), [61, 61, 61, 255]),
             crane: Self::get_crane(),
             actions: vec![(RedGuyPhase::Entry, 0.0)],
-            pos,
+            pos: TILE_SIZE * vec2(84., 3.),
 
             allowed_area: (vec2(66., 1.) * TILE_SIZE, vec2(116., 9. as f32) * TILE_SIZE),
         }
@@ -285,6 +256,12 @@ impl RedGuy {
         player: &Player,
         particles: &mut Vec<Particle>,
     ) {
+        if player.pos.x > 55. * TILE_SIZE {
+            self.active = true;
+        }
+        if !self.active {
+            return;
+        }
         let params = DrawTextureParams {
             dest_size: Some(ASSETS.red_boss.size() * 2.0),
             ..Default::default()
@@ -299,7 +276,6 @@ impl RedGuy {
         }
         // let mut animations = Vec::new();
         let mut new_actions = Vec::new();
-        if is_key_down(KeyCode::F) {}
         self.attack_cooldowns.retain_mut(|f| {
             if f.1 > f.2 {
                 return false;
@@ -308,7 +284,9 @@ impl RedGuy {
                 true
             }
         });
-
+        if self.cannon.shot.is_some() {
+            gl_use_material(&BOSS_DAMAGE_MAT);
+        }
         self.actions.retain_mut(|f| {
             f.1 += frame_time;
             match f.0 {
@@ -319,7 +297,7 @@ impl RedGuy {
                     return false;
                 }
                 RedGuyPhase::Idle(point, duration) => {
-                    self.pos = point + vec2(HOVER_RANGE.0 * f.1.sin(), HOVER_RANGE.1 * f.1.cos());
+                    self.pos = point + vec2(HOVER_RANGE * f.1.sin(), HOVER_RANGE * f.1.cos());
                     let attacks = [
                         RedGuyPhase::Load(RedGuy::rand_enemy()),
                         RedGuyPhase::ShootRocket,
@@ -466,6 +444,9 @@ impl RedGuy {
                 .get(animation)
                 .play(draw_pos, Some(params.clone()));
         }
+        if self.cannon.shot.is_some() {
+            gl_use_default_material();
+        }
         if let Some(cooldown) = &mut self
             .attack_cooldowns
             .iter()
@@ -485,42 +466,6 @@ impl RedGuy {
         }
         self.update_cannon(frame_time, player);
 
-        // if let Some(shot) = &mut self.cannon.shot {
-        //     dbg!(shot.pos);
-        //     let boss_size = ASSETS.red_boss.size();
-        //     if shot.pos.x > self.pos.x
-        //         && shot.pos.x < self.pos.x + boss_size.x
-        //         && shot.pos.y > self.pos.y
-        //         && shot.pos.y < self.pos.y + boss_size.y
-        //     {
-        //         particles.push(Particle::new(
-        //             Box::new(|f| ASSETS.cannon_shot_particle.play(f, None)),
-        //             particles::Lifetime::ByTime(ASSETS.cannon_shot_particle.get_duration()),
-        //             None,
-        //             vec2(shot.pos.x - ASSETS.cannon_shot_particle.size().x, 0.0),
-        //         ));
-        //         self.cannon.shot = None;
-        //     } else {
-        //         shot.past_pos.push(self.pos);
-        //         shot.pos +=
-        //             ((self.pos + boss_size / 2.0) - shot.pos).normalize() * shot.speed * frame_time;
-
-        //         for (index, pos) in shot.past_pos.iter().enumerate() {
-        //             if index == shot.past_pos.len() - 1 {
-        //                 break;
-        //             }
-        //             let next_pos = shot.past_pos[index + 1];
-        //             draw_line(
-        //                 pos.x.ceil(),
-        //                 pos.y.ceil(),
-        //                 next_pos.x.ceil(),
-        //                 next_pos.y.ceil(),
-        //                 2.0,
-        //                 YELLOW,
-        //             );
-        //         }
-        //     }
-        // }
         self.fallings_enemeies.retain_mut(|enemy| {
             enemy.2 += frame_time;
             let func = -(-170. * enemy.2.powi(2) + 261.5 * enemy.2);
@@ -552,6 +497,9 @@ impl RedGuy {
                 animation.play_with_clock(rocket.0, rocket.1, None);
             }
         };
+        if self.cannon.shot.is_some() {
+            gl_use_default_material();
+        }
         match &mut self.pad {
             PadState::Timer(clock) => {
                 *clock -= frame_time;
@@ -565,7 +513,8 @@ impl RedGuy {
                     match action {
                         PadAction::Die => {}
                         PadAction::Pressed => {
-                            self.cannon.action = CannonActions::Shoot;
+                            self.cannon.shot = Some(SHOOT_DURATION);
+                            self.lives -= 1;
                         }
                     }
                     self.pad = PadState::Timer(PAD_TIME);

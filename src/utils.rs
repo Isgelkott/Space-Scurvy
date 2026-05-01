@@ -428,6 +428,28 @@ fn load_shader_material(
     )
     .unwrap()
 }
+pub static BOSS_DAMAGE_MAT: LazyLock<Material> = LazyLock::new(|| {
+    load_shader_material(
+        "#version 100
+precision lowp float;
+
+varying vec2 uv;
+uniform sampler2D Texture;
+
+
+
+void main() {
+  vec4 color = texture2D(Texture, uv);
+  color.r *= 2.0; 
+  
+    gl_FragColor = vec4(color);
+
+}
+
+",
+        None,
+    )
+});
 pub static GRAYSCALE_MAT: LazyLock<Material> = LazyLock::new(|| {
     // stolen from https://godotshaders.com/shader/simple-grayscale-shader-for-canvasitem/ SimranZenov
     load_shader_material(

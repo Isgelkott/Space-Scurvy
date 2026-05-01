@@ -49,11 +49,13 @@ pub struct Assets {
     pub right_pause: AnimationGroup,
     pub lives: AnimationGroup,
     pub pad: AnimationGroup,
+    pub thanks: Texture2D,
 }
 
 impl Assets {
     fn new() -> Self {
         Self {
+            thanks: load_ase_texture(include_bytes!("../assets/thanks.aseprite"), None, None),
             pad: load_animation_group(include_bytes!("../assets/pad.aseprite")),
             lives: load_animation_group(include_bytes!("../assets/lives.aseprite")),
             left_pause: load_animation_group(include_bytes!("../assets/left_pause.aseprite")),

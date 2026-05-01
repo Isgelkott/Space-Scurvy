@@ -548,7 +548,7 @@ impl GameManger {
         let mut gamestate = GameState::MainMenu;
         let mut level_index = 0;
         let mut worlds_index = 0;
-        if let Some(indices) = DEBUG_FLAGS.indices {
+        if let Some(indices) = DEBUG_FLAGS.indexes {
             level_index = indices.1;
             worlds_index = indices.0;
             gamestate = GameState::Normal(Game::new(worlds[indices.0][indices.1].clone()))
@@ -636,6 +636,23 @@ impl GameManger {
                 let scale_factor = (screen_width() / SCREEN_SIZE.0)
                     .min(screen_height() / SCREEN_SIZE.1)
                     .floor();
+                if let Some(boss) = &game.boss {
+                    if boss.lives == 0 {
+                        set_default_camera();
+                        draw_texture_ex(
+                            &ASSETS.thanks,
+                            0.,
+                            0.,
+                            WHITE,
+                            DrawTextureParams {
+                                dest_size: Some(ASSETS.thanks.size() * scale_factor),
+                                ..Default::default()
+                            },
+                        );
+
+                        return;
+                    }
+                }
                 game.scale_factor = scale_factor;
                 if game.respawn {
                     self.new_game = true;

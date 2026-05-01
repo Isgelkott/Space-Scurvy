@@ -11,7 +11,6 @@ use crate::{
 pub enum Projectiles {
     Rocket,
     EnergyBall,
-    Bullet,
 }
 pub enum ProjectileBehaviour {
     Constant,
@@ -35,6 +34,7 @@ pub struct Projectile {
     pub damage: u32,
     pub death_cause: DeathCause,
     pub particle: Option<Particles>,
+    pub lifetime: Option<f32>,
 }
 impl Projectile {
     pub fn update(
@@ -44,6 +44,14 @@ impl Projectile {
         level: &Level,
         particles: &mut Vec<Particle>,
     ) -> bool {
+        if let Some(duration) = &mut self.lifetime {
+            *duration -= frame_time;
+            if duration.is_sign_negative() {
+                particles.push(Particle::preset(Particles::Explosion, self.pos));
+
+                return false;
+            }
+        }
         (self.draw)(
             self.pos,
             self.size,
@@ -94,6 +102,7 @@ impl Projectile {
     pub fn from(pos: Vec2, projectile: Projectiles, direction: Vec2) -> Self {
         match projectile {
             Projectiles::Rocket => Projectile {
+                lifetime: Some(5.),
                 particle: Some(Particles::Explosion),
                 behaviour: ProjectileBehaviour::FollowPlayer,
                 pos,
@@ -101,6 +110,7 @@ impl Projectile {
                 damage: 200,
                 direction,
                 speed: 30.0,
+
                 draw: Box::new(|pos, size, rotation| {
                     ASSETS.rocket.get("fly").play(
                         pos,
@@ -114,6 +124,7 @@ impl Projectile {
                 death_cause: DeathCause::Explode,
             },
             Projectiles::EnergyBall => Self {
+                lifetime: None,
                 pos,
                 size: ASSETS.energy_ball.size(),
                 damage: 20,
@@ -126,28 +137,6 @@ impl Projectile {
                 death_cause: DeathCause::Energy,
                 particle: Some(Particles::EnergyBallShatter),
             },
-            Projectiles::Bullet => {
-                //   if !params.flip_x {
-                //                 self.size.x - 2.0
-                //             } else {
-                //                 2.0
-                //             },
-                //             14.0,
-                //         ),
-                //    ,
-                panic!()
-                // Self {
-                //     pos,
-                //     size: 2.0,
-                //     direction,
-                //     speed: 20.0,
-                //     draw: (),
-                //     behaviour: ProjectileBehaviour::Bullet,
-                //     damage: (),
-                //     death_cause: (),
-                //     particle: (),
-                // };
-            }
         }
     }
 }
