@@ -172,11 +172,11 @@ impl Player {
                     return true;
                 }
                 let is_coliding = check_collision_rectangle_collision(
-                    (self.pos, self.size),
                     (
                         enemy.pos + HITBOX_SHRINK_AMOUNT,
                         enemy.size - HITBOX_SHRINK_AMOUNT,
                     ),
+                    (self.pos, self.size),
                 );
                 if is_coliding {
                     if enemy.jumpable && self.last_pos.y + self.size.y < enemy.pos.y + 4. {

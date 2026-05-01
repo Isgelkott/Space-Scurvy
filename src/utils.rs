@@ -13,7 +13,7 @@ pub struct DebugFlags {
     pub still: bool,
     pub speed: Option<f32>,
     pub show_collisions: bool,
-    pub indices: Option<(usize, usize)>,
+    pub indexes: Option<(usize, usize)>,
 }
 pub static DEBUG_FLAGS: LazyLock<DebugFlags> = LazyLock::new(|| {
     let mut flags = DebugFlags::default();
@@ -28,11 +28,11 @@ pub static DEBUG_FLAGS: LazyLock<DebugFlags> = LazyLock::new(|| {
             "coll" => flags.show_collisions = true,
             arg if arg.contains("-") => {
                 let (first, second) = arg.split_once("-").unwrap();
-                flags.indices = Some((
+                flags.indexes = Some((
                     first.chars().last().unwrap().to_digit(10).unwrap() as usize - 1,
                     second.chars().next().unwrap().to_digit(10).unwrap() as usize - 1,
                 ));
-                dbg!(flags.indices);
+                dbg!(flags.indexes);
             }
             _ => {
                 warn!("unknown flag! {}", arg);

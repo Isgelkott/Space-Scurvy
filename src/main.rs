@@ -12,7 +12,7 @@ use utils::*;
 use crate::{
     assets::ASSETS,
     background::Background,
-    bosses::Boss,
+    bosses::RedGuy,
     particles::{Particle, update_particles},
     projectiles::Projectile,
     utils::{AnimationMethods, HP_MATERIAL, create_camera},
@@ -39,7 +39,12 @@ impl CameraHolder {
         return !(obj.x < self.pos.x - SCREEN_SIZE.0 / 2.
             || obj.x > self.pos.x + SCREEN_SIZE.0 / 2.);
     }
-    fn update(&mut self, player: &Player, level: &Level) {
+    fn update(&mut self, player: &Player, level: &Level, is_boss: bool) {
+        if is_boss {
+            self.pos.x = player.pos.x;
+            self.pos.y = player.pos.y - 20.;
+            return;
+        }
         let mut pos = player.pos;
         let mut c = 0;
         if player.grounded {
@@ -106,7 +111,7 @@ pub struct Game {
     player: Player,
     camera_holder: CameraHolder,
     enemies: Vec<NewEnemy>,
-    boss: Option<Box<dyn Boss>>,
+    boss: Option<RedGuy>,
     pickups: Vec<Pickup>,
     projectiles: Vec<Projectile>,
     particles: Vec<Particle>,
@@ -164,8 +169,8 @@ impl Game {
             ammo_hud_camera: render_target_cam,
             gun_animation: -0.0,
             bullets: Vec::new(),
-            boss: if let Some((boss, tile)) = special_data.boss {
-                Some(boss.to_boss(tile, &map))
+            boss: if let Some(pos) = special_data.boss {
+                Some(RedGuy::new(pos))
             } else {
                 None
             },
@@ -421,7 +426,8 @@ impl Game {
                 &mut self.bullets,
                 &mut self.gun_animation,
             );
-            self.camera_holder.update(&self.player, &self.map);
+            self.camera_holder
+                .update(&self.player, &self.map, self.boss.is_some());
         }
         #[cfg(debug_assertions)]
         {

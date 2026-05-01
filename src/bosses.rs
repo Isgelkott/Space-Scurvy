@@ -1,58 +1,22 @@
-use std::{collections::HashSet, f32::consts::PI};
+use std::f32::consts::PI;
 
 use macroquad::{prelude::*, rand::gen_range};
 
 use crate::{
     assets::ASSETS,
     enemies::{NewEnemy, PresetEnemies},
-    level::{Level, SpecialTileData, TILE_SIZE},
+    level::{Level, TILE_SIZE},
     particles::{self, Particle},
     player::Player,
     projectiles::Projectile,
     utils::*,
 };
-fn find_special_tile_data(level: &Level, data: SpecialTileData) -> Vec2 {
-    panic!()
-    // to_game_pos(
-    //     level
-    //         .tiles
-    //         .iter()
-    //         .enumerate()
-    //         .find(|f| f.1.special_data.iter().any(|f| *f == data))
-    //         .unwrap()
-    //         .0,
-    //     level,
-    // )
-}
-#[derive(Clone)]
-pub enum Bosses {
-    RedGuy,
-}
-impl Bosses {
-    pub fn to_boss(&self, pos: Vec2, level: &Level) -> Box<dyn Boss> {
-        match self {
-            Bosses::RedGuy => RedGuy::new(pos, level),
-        }
-    }
-}
-pub trait Boss {
-    fn new(tile: Vec2, level: &Level) -> Box<dyn Boss>
-    where
-        Self: Sized;
-    fn update(
-        &mut self,
-        map: &Level,
-        enemies: &mut Vec<NewEnemy>,
-        projectiles: &mut Vec<Projectile>,
-        time: f32,
-        player: &Player,
-        particles: &mut Vec<Particle>,
-    );
-}
 
+const PAD_TIME: f32 = 10.;
+const PAD_COOLDOWN: f32 = 0.;
+const PAD_EXPIRE: f32 = 14.;
+const SHOOT_DURATION: f32 = 0.4;
 #[derive(Debug, PartialEq, Clone, Copy)]
-#[expect(dead_code)]
-
 enum RedGuyPhase {
     ShootRocket,
     Idle(Vec2, f32),
@@ -74,18 +38,18 @@ struct Cannon {
     angle: f32,
     clock: f32,
     action: CannonActions,
-    shot: Option<CannonShot>,
+    shot: Option<f32>,
 }
 
 impl Cannon {
     fn cooldown() -> f32 {
         gen_range(10.0, 12.0)
     }
-    fn new(pos: Vec2, level: &Level) -> Self {
+    fn new() -> Self {
         Self {
             shot: None,
             angle: 0.0,
-            pos,
+            pos: vec2(69., 4.) * TILE_SIZE - vec2(0., ASSETS.cannon.size().y),
             clock: 0.0,
             action: CannonActions::Idle,
         }
@@ -93,19 +57,60 @@ impl Cannon {
 }
 struct CannonShot {
     pos: Vec2,
-    speed: f32,
-    past_pos: Vec<Vec2>,
+    dest: Vec2,
+    clock: f32,
 }
 impl CannonShot {
-    fn new(pos: Vec2) -> Self {
+    fn update(&mut self, frame_time: f32) {
+        self.clock += frame_time;
+    }
+    fn new(pos: Vec2, dest: Vec2) -> Self {
         Self {
             pos,
-            speed: 20.0,
-            past_pos: Vec::new(),
+            dest,
+            clock: 0.,
         }
     }
 }
-struct RedGuy {
+enum PadAction {
+    Die,
+    Pressed,
+}
+struct Pad {
+    pos: Vec2,
+    clock: f32,
+}
+impl Pad {
+    fn new(pos: Vec2) -> Self {
+        Self { pos, clock: 0. }
+    }
+    fn update(&mut self, frame_time: f32, player: &Player) -> Option<PadAction> {
+        self.clock += frame_time;
+        if self.clock >= PAD_EXPIRE {
+            Some(PadAction::Die);
+        }
+        if self.clock < 5. {
+            ASSETS.pad.get("help").play(self.pos, None);
+        } else {
+            ASSETS.pad.play_tag("base", self.pos, None);
+        }
+        if check_collision_rectangle_collision(
+            (player.pos, player.size),
+            (
+                self.pos + vec2(0., ASSETS.pad.size().y - 4.0),
+                vec2(ASSETS.pad.size().x, 4.),
+            ),
+        ) {
+            return Some(PadAction::Pressed);
+        }
+        return None;
+    }
+}
+enum PadState {
+    Pad(Pad),
+    Timer(f32),
+}
+pub struct RedGuy {
     pos: Vec2,
     crane: Vec<(f32, Vec2)>,
     catapult: Vec<(f32, Vec2)>,
@@ -115,6 +120,7 @@ struct RedGuy {
     attack_cooldowns: Vec<(RedGuyPhase, f32, f32)>,
     incoming_rocket: Option<(Vec2, f32)>,
     cannon: Cannon,
+    pad: PadState,
 }
 impl RedGuy {
     fn update_cannon(&mut self, frame_time: f32, player: &Player) {
@@ -125,7 +131,6 @@ impl RedGuy {
         let center =
             self.cannon.pos + vec2(65., 14.) - vec2(ASSETS.cannon_barrel.size().x / 2.0, 0.0);
 
-        let shoot_point = vec2(center.x, center.y);
         let boss_center = vec2(
             self.pos.x + ASSETS.red_boss.size().x,
             self.pos.y + ASSETS.red_boss.size().y,
@@ -137,6 +142,17 @@ impl RedGuy {
         } else {
             self.cannon.angle += difference.signum() * frame_time;
         }
+        if is_key_pressed(KeyCode::B) {
+            self.cannon.action = CannonActions::Shoot;
+        }
+        let shoot_point = vec2(
+            center.x
+                + -(ASSETS.cannon_barrel.size().y) * self.cannon.angle.cos()
+                + (self.cannon.angle - PI / 2.).cos() * -8.,
+            center.y
+                + -(ASSETS.cannon_barrel.size().y) * self.cannon.angle.sin()
+                + (self.cannon.angle - PI / 2.).sin() * -8.,
+        );
 
         match self.cannon.action {
             CannonActions::OnCooldown(duration) => {
@@ -154,7 +170,7 @@ impl RedGuy {
                 let duration = barrel_animation.get_duration();
 
                 if self.cannon.clock > duration {
-                    self.cannon.shot = Some(CannonShot::new(shoot_point));
+                    self.cannon.shot = Some(SHOOT_DURATION);
                     dbg!("wa");
                     // self.cannon.action = CannonActions::OnCooldown(Cannon::cooldown());
                     self.cannon.clock = 0.0;
@@ -182,17 +198,19 @@ impl RedGuy {
                 ..Default::default()
             }),
         );
-        if self.cannon.action == CannonActions::Shoot
-            && self.cannon.clock > ASSETS.cannon_barrel.get("shoot").get_duration() - 0.2
-        {
-            // draw_line(
-            //     shoot_point.x,
-            //     shoot_point.y,
-            //     boss_center.x,
-            //     boss_center.y,
-            //     8.0,
-            //     Color::from_hex(0xffeb57),
-            // );
+        if let Some(duration) = &mut self.cannon.shot {
+            *duration -= frame_time;
+            draw_line(
+                shoot_point.x,
+                shoot_point.y,
+                boss_center.x,
+                boss_center.y,
+                8.0,
+                Color::from_hex(0xffeb57),
+            );
+            if duration.is_sign_negative() {
+                self.cannon.shot = None;
+            }
         }
     }
 
@@ -203,7 +221,7 @@ impl RedGuy {
                 allowed_area.1.x - 2.0 * ASSETS.red_boss.size().x - HOVER_RANGE.0,
             ),
             gen_range(
-                allowed_area.1.y - HOVER_RANGE.1 - TILE_SIZE * 4.0,
+                allowed_area.0.y + HOVER_RANGE.1 - TILE_SIZE * 4.0,
                 allowed_area.1.y - ASSETS.red_boss.size().y * 2.0 - HOVER_RANGE.1,
             ),
         )
@@ -239,93 +257,26 @@ impl RedGuy {
         }
         points
     }
-}
-impl Boss for RedGuy {
-    fn new(pos: Vec2, level: &Level) -> Box<dyn Boss> {
-        panic!()
-        // fn valid_tiles_around(tile: usize, level: &Level) -> Vec<usize> {
-        //     let mut without_collision = Vec::new();
-        //     let tiles = [
-        //         tile.saturating_sub(level.width),
-        //         tile + level.width,
-        //         tile.saturating_sub(1),
-        //         tile + 1,
-        //     ];
-        //     for tile in tiles {
-        //         if tile > level.tiles.len() {
-        //             break;
-        //         }
-        //         let object = &level.tiles[tile];
-        //         if !(object.collision
-        //             || object
-        //                 .special_data
-        //                 .iter()
-        //                 .any(|f| *f == SpecialTileData::OutOfBounds))
-        //         {
-        //             without_collision.push(tile);
-        //         }
-        //     }
-        //     without_collision
-        // }
-        // let mut min_x = tile % level.width;
-        // let mut max_x = min_x;
-        // let mut min_y = tile / level.width;
-        // let mut max_y = min_y;
-        // let mut tiles = vec![tile];
-        // let mut checked = HashSet::new();
-        // while !tiles.is_empty() {
-        //     let mut buffer = Vec::new();
-        //     tiles.retain_mut(|tile| {
-        //         if checked.contains(tile) {
-        //             return false;
-        //         }
-        //         checked.insert(*tile);
-        //         min_x = min_x.min(*tile % level.width);
-        //         max_x = max_x.max(min_x);
-        //         min_y = min_y.min(*tile / level.width);
-        //         max_y = max_y.max(*tile / level.width);
-        //         for neighbour in valid_tiles_around(*tile, level) {
-        //             buffer.push(neighbour);
-        //         }
-        //         return false;
-        //     });
-        //     tiles.append(&mut buffer);
-        // }
+    pub fn new(pos: Vec2) -> Self {
+        Self {
+            pad: PadState::Timer(PAD_COOLDOWN),
+            cannon: Cannon::new(),
+            incoming_rocket: None,
+            fallings_enemeies: Vec::new(),
+            attack_cooldowns: Vec::new(),
+            catapult: load_pixel_map(&ASSETS.red_boss.get("catapult"), [61, 61, 61, 255]),
+            crane: Self::get_crane(),
+            actions: vec![(RedGuyPhase::Entry, 0.0)],
+            pos,
 
-        // Box::new(Self {
-        //     cannon: Cannon::new(
-        //         to_game_pos(
-        //             level
-        //                 .tiles
-        //                 .iter()
-        //                 .enumerate()
-        //                 .find(|f| {
-        //                     f.1.special_data
-        //                         .iter()
-        //                         .any(|f| *f == SpecialTileData::Cannon)
-        //                 })
-        //                 .unwrap()
-        //                 .0,
-        //             level,
-        //         ) - vec2(0.0, ASSETS.cannon.get_size().y),
-        //         level,
-        //     ),
-        //     incoming_rocket: None,
-        //     fallings_enemeies: Vec::new(),
-        //     attack_cooldowns: Vec::new(),
-        //     catapult: load_pixel_map(&ASSETS.red_boss.get("catapult"), [61, 61, 61, 255]),
-        //     crane: Self::get_crane(),
-        //     actions: vec![(RedGuyPhase::Entry, 0.0)],
-        //     pos: to_game_pos(tile, level),
-
-        //     allowed_area: (
-        //         vec2(min_x as f32 * TILE_SIZE, min_y as f32 * TILE_SIZE),
-        //         vec2(max_x as f32 * TILE_SIZE, max_y as f32 * TILE_SIZE),
-        //     ),
-        // })
+            allowed_area: (vec2(66., 1.) * TILE_SIZE, vec2(116., 9. as f32) * TILE_SIZE),
+        }
     }
-
-    fn update(
+    fn gen_pad_pos(&self) -> Vec2 {
+        let x = gen_range(self.allowed_area.0.x, self.allowed_area.1.x);
+        return vec2(x, self.allowed_area.1.y - TILE_SIZE);
+    }
+    pub fn update(
         &mut self,
         map: &Level,
         enemies: &mut Vec<NewEnemy>,
@@ -534,55 +485,55 @@ impl Boss for RedGuy {
         }
         self.update_cannon(frame_time, player);
 
-        if let Some(shot) = &mut self.cannon.shot {
-            dbg!(shot.pos);
-            let boss_size = ASSETS.red_boss.size();
-            if shot.pos.x > self.pos.x
-                && shot.pos.x < self.pos.x + boss_size.x
-                && shot.pos.y > self.pos.y
-                && shot.pos.y < self.pos.y + boss_size.y
-            {
-                particles.push(Particle::new(
-                    Box::new(|f| ASSETS.cannon_shot_particle.play(f, None)),
-                    particles::Lifetime::ByTime(ASSETS.cannon_shot_particle.get_duration()),
-                    None,
-                    vec2(shot.pos.x - ASSETS.cannon_shot_particle.size().x, 0.0),
-                ));
-                self.cannon.shot = None;
-            } else {
-                shot.past_pos.push(self.pos);
-                shot.pos +=
-                    ((self.pos + boss_size / 2.0) - shot.pos).normalize() * shot.speed * frame_time;
+        // if let Some(shot) = &mut self.cannon.shot {
+        //     dbg!(shot.pos);
+        //     let boss_size = ASSETS.red_boss.size();
+        //     if shot.pos.x > self.pos.x
+        //         && shot.pos.x < self.pos.x + boss_size.x
+        //         && shot.pos.y > self.pos.y
+        //         && shot.pos.y < self.pos.y + boss_size.y
+        //     {
+        //         particles.push(Particle::new(
+        //             Box::new(|f| ASSETS.cannon_shot_particle.play(f, None)),
+        //             particles::Lifetime::ByTime(ASSETS.cannon_shot_particle.get_duration()),
+        //             None,
+        //             vec2(shot.pos.x - ASSETS.cannon_shot_particle.size().x, 0.0),
+        //         ));
+        //         self.cannon.shot = None;
+        //     } else {
+        //         shot.past_pos.push(self.pos);
+        //         shot.pos +=
+        //             ((self.pos + boss_size / 2.0) - shot.pos).normalize() * shot.speed * frame_time;
 
-                for (index, pos) in shot.past_pos.iter().enumerate() {
-                    if index == shot.past_pos.len() - 1 {
-                        break;
-                    }
-                    let next_pos = shot.past_pos[index + 1];
-                    draw_line(
-                        pos.x.ceil(),
-                        pos.y.ceil(),
-                        next_pos.x.ceil(),
-                        next_pos.y.ceil(),
-                        2.0,
-                        YELLOW,
-                    );
-                }
-            }
-        }
+        //         for (index, pos) in shot.past_pos.iter().enumerate() {
+        //             if index == shot.past_pos.len() - 1 {
+        //                 break;
+        //             }
+        //             let next_pos = shot.past_pos[index + 1];
+        //             draw_line(
+        //                 pos.x.ceil(),
+        //                 pos.y.ceil(),
+        //                 next_pos.x.ceil(),
+        //                 next_pos.y.ceil(),
+        //                 2.0,
+        //                 YELLOW,
+        //             );
+        //         }
+        //     }
+        // }
         self.fallings_enemeies.retain_mut(|enemy| {
             enemy.2 += frame_time;
             let func = -(-170. * enemy.2.powi(2) + 261.5 * enemy.2);
             let heigth = func + enemy.1.y;
-            panic!();
-            // let pos = vec2(enemy.1.x, heigth);
-            // if check_collision(pos, map) && func.is_sign_positive() {
-            //     let pos = vec2(pos.x, (pos.y / 16.0).floor() * 16.0 - 16.0);
-            //     // enemies.push(enemy.0.spawn(pos, map));
-            //     return false;
-            // }
 
-            // draw_texture(enemy.0.default_texture(), pos.x, pos.y, WHITE);
+            let pos = vec2(enemy.1.x, heigth);
+            if map.is_collider(pos) && func.is_sign_positive() {
+                let pos = vec2(pos.x, (pos.y / 16.0).floor() * 16.0 - 16.0);
+                enemies.push(NewEnemy::new(enemy.0, pos, map));
+                return false;
+            }
+
+            draw_texture(enemy.0.default_texture(), pos.x, pos.y, WHITE);
             return true;
         });
         self.actions.append(&mut new_actions);
@@ -599,6 +550,26 @@ impl Boss for RedGuy {
                 ));
             } else {
                 animation.play_with_clock(rocket.0, rocket.1, None);
+            }
+        };
+        match &mut self.pad {
+            PadState::Timer(clock) => {
+                *clock -= frame_time;
+                if clock.is_sign_negative() {
+                    self.pad = PadState::Pad(Pad::new(self.gen_pad_pos()))
+                }
+            }
+            PadState::Pad(pad) => {
+                dbg!(pad.pos);
+                if let Some(action) = pad.update(frame_time, player) {
+                    match action {
+                        PadAction::Die => {}
+                        PadAction::Pressed => {
+                            self.cannon.action = CannonActions::Shoot;
+                        }
+                    }
+                    self.pad = PadState::Timer(PAD_TIME);
+                }
             }
         }
     }

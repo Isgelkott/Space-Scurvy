@@ -48,11 +48,13 @@ pub struct Assets {
     pub left_pause: AnimationGroup,
     pub right_pause: AnimationGroup,
     pub lives: AnimationGroup,
+    pub pad: AnimationGroup,
 }
 
 impl Assets {
     fn new() -> Self {
         Self {
+            pad: load_animation_group(include_bytes!("../assets/pad.aseprite")),
             lives: load_animation_group(include_bytes!("../assets/lives.aseprite")),
             left_pause: load_animation_group(include_bytes!("../assets/left_pause.aseprite")),
             right_pause: load_animation_group(include_bytes!("../assets/right_pause.aseprite")),

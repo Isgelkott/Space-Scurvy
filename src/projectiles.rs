@@ -44,7 +44,11 @@ impl Projectile {
         level: &Level,
         particles: &mut Vec<Particle>,
     ) -> bool {
-        (self.draw)(self.pos, self.size, 0.);
+        (self.draw)(
+            self.pos,
+            self.size,
+            (player.pos - self.pos).normalize().to_angle(),
+        );
 
         match &self.behaviour {
             ProjectileBehaviour::Constant => {
@@ -96,7 +100,7 @@ impl Projectile {
                 size: ASSETS.rocket.size(),
                 damage: 200,
                 direction,
-                speed: 120.0,
+                speed: 30.0,
                 draw: Box::new(|pos, size, rotation| {
                     ASSETS.rocket.get("fly").play(
                         pos,

@@ -1,7 +1,6 @@
 use crate::{
     Game,
     assets::ASSETS,
-    bosses::Bosses,
     enemies::{ENEMY_IDS, PresetEnemies, check_collision_with_size},
     particles::ParticleGenerator,
     player::DeathCause,
@@ -202,11 +201,7 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
                 special_data.pickups.push(pickup);
             }
             360..380 => {
-                let boss = match id {
-                    361 => Bosses::RedGuy,
-                    _ => unreachable!(),
-                };
-                special_data.boss = Some((boss, pos));
+                special_data.boss = Some(pos);
             }
             380..400 => match id {
                 381 => {
@@ -372,7 +367,7 @@ pub fn update_pickups(game: &mut Game) {
 pub struct SpecialData {
     pub spawn_location: Vec2,
     pub enemies: Vec<(PresetEnemies, Vec2)>,
-    pub boss: Option<(Bosses, Vec2)>,
+    pub boss: Option<(Vec2)>,
     pub pickups: Vec<Pickup>,
     pub map_animations: Vec<MapAnimation>,
 }
