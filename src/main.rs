@@ -658,6 +658,8 @@ impl GameManger {
                     self.new_game = true;
                     self.lives -= 1;
                 }
+                let mut a_black_bars = false;
+                let mut a_transition_length = 0.;
                 if game.win {
                     let mut black_bars: bool = false;
 
@@ -724,36 +726,38 @@ impl GameManger {
                             BLACK,
                         );
                     }
+                    a_black_bars = black_bars;
+                    a_transition_length = transition_length;
                 }
 
                 game.draw_camera();
-                if black_bars {
-                    set_default_camera();
-                    const PADDING: f32 = 500.;
-                    draw_rectangle(
-                        0.0,
-                        -PADDING,
-                        screen_width(),
-                        (self.clock - ASSETS.win_animation.get_duration()) / transition_length
-                            * screen_height()
-                            / 2.0
-                            + PADDING,
-                        BLACK,
-                    );
-                    draw_rectangle(
-                        0.0,
-                        PADDING + screen_height(),
-                        screen_width(),
-                        -(self.clock - ASSETS.win_animation.get_duration()) / transition_length
-                            * screen_height()
-                            / 2.0
-                            - PADDING,
-                        BLACK,
-                    );
-                }
                 game.draw_ammo(frame_time);
 
                 game.draw_hud(frame_time);
+
+                set_default_camera();
+                if a_black_bars {
+                    draw_rectangle(
+                        0.0,
+                        0.0,
+                        screen_width(),
+                        (self.clock - ASSETS.win_animation.get_duration()) / a_transition_length
+                            * screen_height()
+                            / 2.0,
+                        BLACK,
+                    );
+                    draw_rectangle(
+                        0.0,
+                        0.0 + screen_height(),
+                        screen_width(),
+                        -(self.clock - ASSETS.win_animation.get_duration()) / a_transition_length
+                            * screen_height()
+                            / 2.0
+                            - 0.0,
+                        BLACK,
+                    );
+                }
+
                 set_camera(&game.camera_holder.camera);
 
                 if let Some(speed) = DEBUG_FLAGS.speed {
