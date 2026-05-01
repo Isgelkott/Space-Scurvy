@@ -40,7 +40,7 @@ impl CameraHolder {
             || obj.x > self.pos.x + SCREEN_SIZE.0 / 2.);
     }
     fn update(&mut self, player: &Player, level: &Level, is_boss: bool) {
-        if is_boss {
+        if is_boss && player.pos.x > 63. * TILE_SIZE {
             self.pos.x = player.pos.x;
             self.pos.y = player.pos.y - 20.;
             return;
@@ -702,28 +702,55 @@ impl GameManger {
                         );
                     }
                     if black_bars {
+                        const PADDING: f32 = 500.;
                         draw_rectangle(
                             0.0,
-                            0.0,
+                            -PADDING,
                             screen_width(),
                             (self.clock - ASSETS.win_animation.get_duration()) / transition_length
                                 * screen_height()
-                                / 2.0,
+                                / 2.0
+                                + PADDING,
                             BLACK,
                         );
                         draw_rectangle(
                             0.0,
-                            screen_height(),
+                            PADDING + screen_height(),
                             screen_width(),
                             -(self.clock - ASSETS.win_animation.get_duration()) / transition_length
                                 * screen_height()
-                                / 2.0,
+                                / 2.0
+                                - PADDING,
                             BLACK,
                         );
                     }
                 }
 
                 game.draw_camera();
+                if black_bars {
+                    set_default_camera();
+                    const PADDING: f32 = 500.;
+                    draw_rectangle(
+                        0.0,
+                        -PADDING,
+                        screen_width(),
+                        (self.clock - ASSETS.win_animation.get_duration()) / transition_length
+                            * screen_height()
+                            / 2.0
+                            + PADDING,
+                        BLACK,
+                    );
+                    draw_rectangle(
+                        0.0,
+                        PADDING + screen_height(),
+                        screen_width(),
+                        -(self.clock - ASSETS.win_animation.get_duration()) / transition_length
+                            * screen_height()
+                            / 2.0
+                            - PADDING,
+                        BLACK,
+                    );
+                }
                 game.draw_ammo(frame_time);
 
                 game.draw_hud(frame_time);
