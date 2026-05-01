@@ -3,7 +3,7 @@
 use std::f32::consts::{PI, TAU};
 
 use enemies::*;
-use include_dir::Dir;
+use include_dir::{Dir, include_dir};
 use level::*;
 use macroquad::prelude::*;
 use player::*;
@@ -60,7 +60,9 @@ impl CameraHolder {
         }
         const Y_SPEED: f32 = 0.5;
         const Y_BELOW_THRESHOLD: f32 = 30.0;
-        if player.pos.y + SCREEN_SIZE.1 / 2.0 + Y_BELOW_THRESHOLD > self.pos.y + SCREEN_SIZE.1 {
+        if player.pos.y + SCREEN_SIZE.1 / 2.0 + Y_BELOW_THRESHOLD > self.pos.y + SCREEN_SIZE.1
+            || player.pos.y < self.pos.y - SCREEN_SIZE.1 / 2. - Y_BELOW_THRESHOLD
+        {
             self.pos.y = player.pos.y;
             self.desired_y = self.pos.y
         }
@@ -91,13 +93,13 @@ impl CameraHolder {
         //self.pos = self.pos.round();
     }
     fn calculate_y_up(&mut self, player: &Player) {
-        // self.desired_y = player.pos.y - 17.5;
+        self.desired_y = player.pos.y - 17.5;
     }
 }
 
 pub struct Game {
     win: bool,
-    die: bool,
+    respawn: bool,
     scale_factor: f32,
     map: Level,
     backgrounds: Background,
@@ -167,7 +169,7 @@ impl Game {
             } else {
                 None
             },
-            die: false,
+            respawn: false,
             win: false,
             pickups: special_data.pickups,
             backgrounds: Background::new(
@@ -238,7 +240,7 @@ impl Game {
                 DeathCause::Explode => "explode",
             });
             if death.1 > animation.get_duration() {
-                self.die = true;
+                self.respawn = true;
             } else {
                 animation.play_with_clock(
                     self.player.pos - ASSETS.death_animations.size() / 2.0 + self.player.size / 2.0,
@@ -408,7 +410,7 @@ impl Game {
         for animation in self.map_animations.iter_mut() {
             animation.update(frame_time);
         }
-        if !self.win && !self.die {
+        if !self.win && !self.respawn {
             self.player.update(
                 &mut self.map,
                 &mut self.projectiles,
@@ -448,28 +450,75 @@ impl Game {
     }
 }
 struct GameManagerManager {
-    levels: Vec<(Level, SpecialData)>,
+    worlds: Vec<Vec<(Level, SpecialData)>>,
     game_manager: GameManger,
 }
 impl GameManagerManager {
+    fn new_game_man(&mut self) {
+        self.game_manager = GameManger::new(&self.worlds);
+    }
     fn new() -> Self {
-        let levels_dir = include_dir::include_dir!("./assets/maps");
-        let mut levels = Vec::new();
+        let levels_dir = include_dir!("./assets/maps");
+        let mut worlds = vec![vec![]; 3];
         for level in levels_dir.entries().iter() {
+            let world = level
+                .path()
+                .as_os_str()
+                .to_str()
+                .unwrap()
+                .split_once("-")
+                .unwrap()
+                .0
+                .chars()
+                .last()
+                .unwrap()
+                .to_digit(10)
+                .unwrap() as usize
+                - 1;
+
             let contents = level.as_file().unwrap().contents_utf8().unwrap();
             dbg!(level.path());
-            levels.push(load_tilemap(
-                contents,
-                include_str!("../assets/tileset.tsx"),
-            ));
+            let data = load_tilemap(contents, include_str!("../assets/tileset.tsx"));
+            worlds[world].push(data);
         }
         GameManagerManager {
-            levels,
-            game_manager: GameManger::new(),
+            game_manager: GameManger::new(&worlds),
+            worlds,
         }
     }
     fn update(&mut self) {
-        self.game_manager.update(&self.levels);
+        if self.game_manager.next_level {
+            // oh lord forgive me for my sins the event is ending soon AND IM FUCKED!!!!
+            self.game_manager.level_index += 1;
+
+            self.game_manager.new_game(
+                self.worlds[self.game_manager.worlds_index][self.game_manager.level_index].clone(),
+            );
+            self.game_manager.new_game = false;
+            self.game_manager.next_level = false;
+        } else if self.game_manager.new_game {
+            self.game_manager.new_game(
+                self.worlds[self.game_manager.worlds_index][self.game_manager.level_index].clone(),
+            );
+            self.game_manager.new_game = false;
+            self.game_manager.next_level = false;
+        }
+        if self.game_manager.lives == 0 {
+            set_default_camera();
+            clear_background(BLACK);
+            draw_text(
+                "You failed sport! Better luck next time",
+                screen_width() / 2.,
+                screen_height() / 2.,
+                screen_width() / 20.,
+                RED,
+            );
+            if !get_keys_pressed().is_empty() {
+                self.new_game_man();
+            }
+        } else {
+            self.game_manager.update();
+        }
     }
 }
 enum GameState {
@@ -479,25 +528,33 @@ enum GameState {
 struct GameManger {
     gamestate: GameState,
     level_index: usize,
+    worlds_index: usize,
     clock: f32,
     new_game: bool,
     next_level: bool,
     lives: u8,
 }
 impl GameManger {
-    fn new_game(&mut self, levels: &Vec<(Level, SpecialData)>) {
-        dbg!(self.level_index, levels.len());
-        self.gamestate = GameState::Normal(Game::new(levels[self.level_index].clone()));
-        dbg!("WAAAAAAAAAAAAAA");
+    fn new_game(&mut self, level_data: (Level, SpecialData)) {
+        self.gamestate = GameState::Normal(Game::new(level_data));
     }
-    fn new() -> Self {
+    fn new(worlds: &Vec<Vec<(Level, SpecialData)>>) -> Self {
+        let mut gamestate = GameState::MainMenu;
+        let mut level_index = 0;
+        let mut worlds_index = 0;
+        if let Some(indices) = DEBUG_FLAGS.indices {
+            level_index = indices.1;
+            worlds_index = indices.0;
+            gamestate = GameState::Normal(Game::new(worlds[indices.0][indices.1].clone()))
+        }
         Self {
+            worlds_index,
             new_game: false,
             next_level: false,
             clock: 0.0,
-            gamestate: GameState::MainMenu,
+            gamestate,
             lives: START_LIVES,
-            level_index: 0,
+            level_index,
         }
     }
     fn die_screen(&mut self) {
@@ -528,23 +585,10 @@ impl GameManger {
             todo!("");
         }
     }
-    fn update(&mut self, levels: &Vec<(Level, SpecialData)>) {
+
+    fn update(&mut self) {
         let mut frame_time = get_frame_time().min(1. / 60.0);
 
-        if self.next_level {
-            self.level_index += 1;
-            if self.level_index <= levels.len() - 1 {
-                self.new_game(levels);
-                self.new_game = false;
-                self.next_level = false;
-            } else {
-                todo!("win fr")
-            }
-        } else if self.new_game {
-            self.new_game(levels);
-            self.new_game = false;
-            self.next_level = false;
-        }
         match &mut self.gamestate {
             GameState::MainMenu => {
                 let scale_factor = (screen_width() / ASSETS.main_menu.width())
@@ -587,6 +631,10 @@ impl GameManger {
                     .min(screen_height() / SCREEN_SIZE.1)
                     .floor();
                 game.scale_factor = scale_factor;
+                if game.respawn {
+                    self.new_game = true;
+                    self.lives -= 1;
+                }
                 if game.win {
                     let mut black_bars: bool = false;
 

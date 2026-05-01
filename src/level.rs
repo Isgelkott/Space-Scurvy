@@ -132,11 +132,8 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
                 tile.collision = true;
                 visual = Some(id);
             }
-            60..80 => {
-                let map_animation = match id {
-                    62 => &ASSETS.laughing_man,
-                    _ => panic!(),
-                };
+            62 => {
+                let map_animation = &ASSETS.laughing_man;
                 special_data
                     .map_animations
                     .push(MapAnimation::new(pos, map_animation));
@@ -157,19 +154,23 @@ pub fn load_tilemap(tilemap: &str, tileset: &str) -> (Level, SpecialData) {
                     tile.visual
                         .push(VisualData::Animation(&ASSETS.acid.get("inside")));
                 }
-                _ => tile.death_cause = Some(DeathCause::Default),
+                _ => {
+                    tile.death_cause = Some(DeathCause::Default);
+                    visual = Some(id)
+                }
             },
-
+            100..120 => {
+                tile.collision = true;
+                visual = Some(id);
+            }
             140..160 => {
                 // enemies
                 let enemy = *ENEMY_IDS.get(&id).unwrap();
-                dbg!(enemy, pos, id);
                 special_data.enemies.push((enemy, pos));
             }
             160..180 => {
                 // enemies with tiles
                 let enemy = *ENEMY_IDS.get(&id).unwrap();
-                dbg!(enemy, pos, id);
                 visual = Some(id);
                 tile.collision = true;
                 special_data.enemies.push((enemy, pos));
@@ -359,6 +360,7 @@ pub fn update_pickups(game: &mut Game) {
                 }
                 PickupEffects::Win => {
                     game.win = true;
+                    game.player.hp += 20.max(100);
                 }
             }
             return false;

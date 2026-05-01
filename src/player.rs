@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, u8};
 
 use crate::{
     CameraHolder,
@@ -65,13 +65,16 @@ pub enum DeathCause {
 }
 pub const GUN_ANIMATION_LENGHT: f32 = 1.;
 impl Player {
+    pub fn heal(&mut self, heal: u32) {
+        self.hp = (self.hp + heal).max(100);
+    }
     pub fn center(&self) -> Vec2 {
         self.pos + self.size / 2.
     }
     pub fn damage(&mut self, dmg: u32, death_cause: DeathCause) {
         if self.death.is_none() {
             if self.iframes.is_none() {
-                self.iframes = Some(3.0);
+                self.iframes = Some(1.0);
                 self.hp = self.hp.saturating_sub(dmg);
                 if self.hp == 0 {
                     self.death = Some((death_cause, 0.0));
@@ -90,7 +93,7 @@ impl Player {
             death: None,
             iframes: None,
             hp: 100,
-            previous_flipped: true,
+            previous_flipped: false,
             current_top_animation: None,
             grounded: false,
             size: vec2(TILE_SIZE, TILE_SIZE * 2.0),
@@ -182,7 +185,7 @@ impl Player {
                         return false;
                     } else {
                         self.knockback(enemy.pos + enemy.size / 2., 30.);
-                        self.damage(15, DeathCause::Default);
+                        self.damage(30, DeathCause::Default);
                     }
                 }
                 return true;

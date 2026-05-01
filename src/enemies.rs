@@ -122,7 +122,7 @@ fn is_grounded_and_check_bounds(
 
     return (grounded, collid_with_wall);
 }
-fn check_player_collision(pos: Vec2, size: Vec2, player: &Player) -> bool {
+fn check_player_collision(pos: Vec2, size: Vec2, player: &mut Player) -> bool {
     let points = [(0.0, 0.0), (size.x, 0.0), (0.0, size.y), (size.x, size.y)];
 
     points.iter().any(|f| {
@@ -176,7 +176,7 @@ fn check_projectile_collision<'a>(
     pos: Vec2,
     size: Vec2,
     map: &Level,
-    player: &Player,
+    player: &mut Player,
     enemies: &'a mut Vec<NewEnemy>,
 ) -> Option<CollisionType<'a>> {
     if check_player_collision(pos, size, player) {
@@ -202,7 +202,7 @@ pub enum CollisionType<'a> {
 
 pub fn update_enemies(
     enemies: &mut Vec<NewEnemy>,
-    player: &Player,
+    player: &mut Player,
     level: &Level,
     projectiles: &mut Vec<Projectile>,
     frame_time: f32,
@@ -211,33 +211,33 @@ pub fn update_enemies(
 ) {
     for enemy in enemies.iter_mut() {
         bullets.retain_mut(|bullet| {
-            for i in 0..2 {
-                let bullet_pos =
-                    bullet.pos - vec2(i as f32 * TILE_SIZE * bullet.direction.signum(), 0.);
-                if check_collision_rectangle_collision(
-                    (enemy.pos, enemy.size),
-                    (bullet_pos, bullet.size),
-                ) {
-                    enemy.kill();
-                    particles.push(Particle::preset(
-                        crate::particles::Particles::Blood,
-                        bullet_pos,
-                    ));
-                    return false;
-                }
+            if check_collision_rectangle_collision(
+                (bullet.pos, bullet.size),
+                (enemy.pos, enemy.size),
+            ) {
+                println!("wa");
+                enemy.kill();
+                particles.push(Particle::preset(
+                    crate::particles::Particles::Blood,
+                    bullet.pos,
+                ));
+                return false;
             }
+
             return true;
         });
         if let Some((time, fall_velocity)) = &mut enemy.die {
             *time += frame_time;
-            enemy.animations.get("die").play_with_clock(
-                enemy.pos + vec2(0., 4.),
-                *time,
-                Some(DrawTextureParams {
-                    flip_x: enemy.flipped,
-                    ..Default::default()
-                }),
-            );
+            if let Some(death_animation) = enemy.animations.get_optional("die") {
+                death_animation.play_with_clock(
+                    enemy.pos + vec2(0., 4.),
+                    *time,
+                    Some(DrawTextureParams {
+                        flip_x: enemy.flipped,
+                        ..Default::default()
+                    }),
+                );
+            }
             let (grounded, _) = is_grounded_and_check_bounds(
                 &mut enemy.pos,
                 &mut enemy.size,
@@ -268,7 +268,7 @@ pub trait EnemyBehaviour {
         &mut self,
         pos: &mut Vec2,
         size: &mut Vec2,
-        player: &Player,
+        player: &mut Player,
 
         map: &Level,
         projectiles: &mut Vec<Projectile>,
@@ -304,6 +304,7 @@ impl NewEnemy {
                 behaviour = Box::new(Jetpacker::new(pos, level));
             }
             PresetEnemies::Fish => {
+                jumpable = false;
                 animations = &ASSETS.fish;
                 behaviour = Box::new(Fish::new(pos, level));
             }
@@ -357,7 +358,7 @@ impl EnemyBehaviour for Fish {
         &mut self,
         pos: &mut Vec2,
         size: &mut Vec2,
-        player: &Player,
+        player: &mut Player,
         map: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
@@ -442,7 +443,7 @@ impl EnemyBehaviour for FireWagon {
         &mut self,
         pos: &mut Vec2,
         size: &mut Vec2,
-        player: &Player,
+        player: &mut Player,
         map: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
@@ -501,7 +502,7 @@ impl EnemyBehaviour for BombChain {
         &mut self,
         pos: &mut Vec2,
         size: &mut Vec2,
-        player: &Player,
+        player: &mut Player,
         map: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
@@ -525,6 +526,14 @@ impl EnemyBehaviour for BombChain {
             },
         );
         if self.has_bomb {
+            if check_collision_rectangle_collision(
+                (self.bomb_pos, ASSETS.bomb.size()),
+                (player.pos, player.size),
+            ) {
+                self.has_bomb = false;
+                player.damage(20, crate::player::DeathCause::Explode);
+                player.knockback(self.bomb_pos + ASSETS.bomb.size() / 2., 1200.);
+            }
             draw_texture_ex(
                 &ASSETS.bomb,
                 self.bomb_pos.x,
@@ -558,7 +567,7 @@ impl EnemyBehaviour for MachineGunner {
         &mut self,
         pos: &mut Vec2,
         size: &mut Vec2,
-        player: &Player,
+        player: &mut Player,
         map: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
@@ -600,7 +609,7 @@ impl EnemyBehaviour for MachineGunner {
 //     fn new(pos: Vec2, level: &Level) -> Self {}
 //     fn update(
 //         &mut self,
-//         player: &Player,
+//         player: &mut Player,
 //         map: &Level,
 //         projectiles: &mut Vec<Projectile>,
 //         frame_time: f32,
@@ -650,7 +659,7 @@ impl EnemyBehaviour for Jetpacker {
         &mut self,
         pos: &mut Vec2,
         size: &mut Vec2,
-        player: &Player,
+        player: &mut Player,
         level: &Level,
         projectiles: &mut Vec<Projectile>,
         frame_time: f32,
@@ -679,7 +688,7 @@ impl EnemyBehaviour for Jetpacker {
                 if pos.y < self.origin.y - self.fly_height {
                     self.state = JetpackerState::Stall(STALL_DURATION);
                     projectiles.push(Projectile::from(
-                        *pos,
+                        *pos + vec2(ASSETS.jetpack.size().x, 0.),
                         crate::projectiles::Projectiles::EnergyBall,
                         (player.pos - *pos).normalize(),
                     ));

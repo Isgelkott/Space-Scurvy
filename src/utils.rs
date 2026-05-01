@@ -13,6 +13,7 @@ pub struct DebugFlags {
     pub still: bool,
     pub speed: Option<f32>,
     pub show_collisions: bool,
+    pub indices: Option<(usize, usize)>,
 }
 pub static DEBUG_FLAGS: LazyLock<DebugFlags> = LazyLock::new(|| {
     let mut flags = DebugFlags::default();
@@ -25,6 +26,14 @@ pub static DEBUG_FLAGS: LazyLock<DebugFlags> = LazyLock::new(|| {
             "still" => flags.still = true,
             "speed" => flags.speed = Some(iter.next().unwrap().parse::<f32>().unwrap()),
             "coll" => flags.show_collisions = true,
+            arg if arg.contains("-") => {
+                let (first, second) = arg.split_once("-").unwrap();
+                flags.indices = Some((
+                    first.chars().last().unwrap().to_digit(10).unwrap() as usize - 1,
+                    second.chars().next().unwrap().to_digit(10).unwrap() as usize - 1,
+                ));
+                dbg!(flags.indices);
+            }
             _ => {
                 warn!("unknown flag! {}", arg);
             }
@@ -311,6 +320,9 @@ pub fn mouse_pos() -> Vec2 {
 #[derive(Debug)]
 pub struct AnimationGroup(pub HashMap<String, Animation>);
 impl AnimationGroup {
+    pub fn get_optional(&self, key: &str) -> Option<&Animation> {
+        self.0.get(key)
+    }
     pub fn default(&self) -> &Texture2D {
         &self.get("ref").0[0].0
     }
